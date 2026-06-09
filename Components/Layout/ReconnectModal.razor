@@ -1,0 +1,31 @@
+<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
+
+<dialog id="components-reconnect-modal" data-nosnippet
+        class="fixed inset-0 w-full h-full bg-white/80 backdrop-blur-sm flex items-center justify-center z-50 border-0 p-0 max-w-none max-h-none">
+    <div class="bg-white rounded-2xl shadow-xl p-6 text-center max-w-sm mx-4">
+        <div class="text-3xl mb-3">🔄</div>
+        <p class="components-reconnect-first-attempt-visible text-gray-600 text-sm">
+            Reconnexion au serveur…
+        </p>
+        <p class="components-reconnect-repeated-attempt-visible text-gray-500 text-sm">
+            Échec de reconnexion… nouvelle tentative dans <span id="components-seconds-to-next-attempt"></span> secondes.
+        </p>
+        <p class="components-reconnect-failed-visible text-red-500 text-sm">
+            Impossible de se reconnecter.<br />Veuillez réessayer ou recharger la page.
+        </p>
+        <button id="components-reconnect-button"
+                class="components-reconnect-failed-visible mt-3 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Réessayer
+        </button>
+        <p class="components-pause-visible text-gray-500 text-sm">
+            La session a été mise en pause par le serveur.
+        </p>
+        <p class="components-resume-failed-visible text-red-500 text-sm">
+            Échec de reprise de session.<br />Veuillez réessayer ou recharger la page.
+        </p>
+        <button id="components-resume-button"
+                class="components-pause-visible components-resume-failed-visible mt-3 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Reprendre
+        </button>
+    </div>
+</dialog>

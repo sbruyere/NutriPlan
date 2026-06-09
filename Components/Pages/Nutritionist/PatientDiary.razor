@@ -1,0 +1,231 @@
+@page "/nutritionniste/patient/{AccessCode}"
+@rendermode InteractiveServer
+@inject DiaryService DiaryService
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+
+<PageTitle>Carnet patient — NutriPlan</PageTitle>
+
+@if (!Session.IsNutritionistLoggedIn)
+{
+    <div class="text-center text-gray-400 py-12">Redirection…</div>
+    return;
+}
+
+@if (diary == null)
+{
+    <div class="text-center text-gray-400 py-12">Chargement…</div>
+    return;
+}
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+            <a href="/nutritionniste/tableau-de-bord" class="text-gray-400 hover:text-gray-600 transition-colors">
+                ←
+            </a>
+            <div>
+                <h1 class="text-xl font-bold text-gray-800">@(diary.PatientAlias ?? "Patient anonyme")</h1>
+                <p class="text-xs font-mono text-gray-400">@diary.AccessCode · Depuis le @diary.CreatedAt.ToString("d MMM yyyy", new System.Globalization.CultureInfo("fr-FR"))</p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button @onclick="() => showHistory = !showHistory"
+                    class="text-sm text-primary-600 hover:text-primary-800 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
+                @(showHistory ? "Vue journée" : "Historique")
+            </button>
+            <button @onclick="DeleteDiary"
+                    class="text-sm text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors">
+                Supprimer
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(diary.Notes))
+    {
+        <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-700">
+            <strong>Notes :</strong> @diary.Notes
+        </div>
+    }
+
+    @if (!showHistory)
+    {
+        <!-- Sélecteur de date -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
+            <button @onclick="PreviousDay" class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500">
+                ←
+            </button>
+            <div class="text-center">
+                <p class="font-semibold text-gray-800">@selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))</p>
+                @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
+                {
+                    <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">Aujourd'hui</span>
+                }
+            </div>
+            <button @onclick="NextDay"
+                    disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
+                    class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors text-gray-500">
+                →
+            </button>
+        </div>
+
+        @if (currentLog == null || currentLog.FoodEntries.Count == 0)
+        {
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                <p class="text-gray-300 text-sm">Aucune entrée pour ce jour.</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var mealType in Enum.GetValues<MealType>())
+            {
+                var entries = currentLog.FoodEntries.Where(e => e.MealType == mealType).ToList();
+                if (entries.Count == 0) continue;
+
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+                        <span class="text-lg">@MealIcon(mealType)</span>
+                        <span class="font-medium text-gray-700">@MealLabel(mealType)</span>
+                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">@entries.Count</span>
+                    </div>
+                    <ul class="divide-y divide-gray-50">
+                        @foreach (var entry in entries)
+                        {
+                            <li class="px-4 py-3">
+                                <p class="text-sm font-medium text-gray-800">@entry.FoodName</p>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    @if (!string.IsNullOrEmpty(entry.Quantity))
+                                    {
+                                        <span class="text-xs text-gray-400">@entry.Quantity</span>
+                                    }
+                                    @if (entry.Time.HasValue)
+                                    {
+                                        <span class="text-xs text-gray-300">@entry.Time.Value.ToString("HH:mm")</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(entry.Notes))
+                                    {
+                                        <span class="text-xs text-gray-400 italic">@entry.Notes</span>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(currentLog.Notes))
+            {
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <p class="text-xs font-medium text-gray-400 mb-1">NOTES DU PATIENT</p>
+                    <p class="text-sm text-gray-600">@currentLog.Notes</p>
+                </div>
+            }
+        }
+    }
+    else
+    {
+        <NutritionistHistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
+    }
+</div>
+
+@if (showDeleteConfirm)
+{
+    <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+            <div class="text-4xl mb-3">⚠️</div>
+            <h3 class="font-semibold text-gray-800 mb-2">Supprimer ce carnet ?</h3>
+            <p class="text-sm text-gray-400 mb-6">
+                Toutes les entrées de <strong>@diary.PatientAlias</strong> seront supprimées définitivement.
+            </p>
+            <div class="flex gap-3">
+                <button @onclick="() => showDeleteConfirm = false"
+                        class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition-colors">
+                    Annuler
+                </button>
+                <button @onclick="ConfirmDelete"
+                        class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                    Supprimer
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string AccessCode { get; set; } = "";
+
+    FoodDiary? diary;
+    DailyLog? currentLog;
+    DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Today);
+    bool showHistory;
+    bool showDeleteConfirm;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsNutritionistLoggedIn)
+        {
+            Nav.NavigateTo("/nutritionniste/connexion");
+            return;
+        }
+        diary = await DiaryService.GetDiaryByCodeAsync(AccessCode.ToUpperInvariant());
+        if (diary == null || diary.NutritionistId != Session.NutritionistId)
+        {
+            Nav.NavigateTo("/nutritionniste/tableau-de-bord");
+            return;
+        }
+        await LoadDay();
+    }
+
+    async Task LoadDay()
+    {
+        currentLog = await DiaryService.GetDailyLogWithEntriesAsync(diary!.Id, selectedDate);
+    }
+
+    async Task PreviousDay()
+    {
+        selectedDate = selectedDate.AddDays(-1);
+        await LoadDay();
+    }
+
+    async Task NextDay()
+    {
+        if (selectedDate < DateOnly.FromDateTime(DateTime.Today))
+        {
+            selectedDate = selectedDate.AddDays(1);
+            await LoadDay();
+        }
+    }
+
+    void SelectDate(DateOnly date)
+    {
+        selectedDate = date;
+        showHistory = false;
+        _ = LoadDay();
+    }
+
+    void DeleteDiary() => showDeleteConfirm = true;
+
+    async Task ConfirmDelete()
+    {
+        await DiaryService.DeleteDiaryAsync(diary!.Id);
+        Nav.NavigateTo("/nutritionniste/tableau-de-bord");
+    }
+
+    static string MealLabel(MealType m) => m switch
+    {
+        MealType.PetitDejeuner => "Petit-déjeuner",
+        MealType.Dejeuner => "Déjeuner",
+        MealType.Diner => "Dîner",
+        MealType.Collation => "Collation",
+        _ => "Autre"
+    };
+
+    static string MealIcon(MealType m) => m switch
+    {
+        MealType.PetitDejeuner => "☕",
+        MealType.Dejeuner => "🍽️",
+        MealType.Diner => "🌙",
+        MealType.Collation => "🍎",
+        _ => "🍴"
+    };
+}

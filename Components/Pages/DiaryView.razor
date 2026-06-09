@@ -1,0 +1,307 @@
+@page "/carnet/{AccessCode}/journal"
+@rendermode InteractiveServer
+@inject DiaryService DiaryService
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+
+<PageTitle>Mon carnet — NutriPlan</PageTitle>
+
+@if (!isAuthorized)
+{
+    <div class="text-center text-gray-400 py-12">Redirection…</div>
+    return;
+}
+
+@if (diary == null)
+{
+    <div class="text-center text-gray-400 py-12">Chargement…</div>
+    return;
+}
+
+<div class="space-y-6">
+    <!-- En-tête -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-800">Mon carnet alimentaire</h1>
+            <p class="text-xs text-gray-400 font-mono mt-0.5">Code : @AccessCode</p>
+        </div>
+        <div class="flex gap-2">
+            <button @onclick="() => showHistory = !showHistory"
+                    class="text-sm text-primary-600 hover:text-primary-800 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
+                @(showHistory ? "Vue journée" : "Historique")
+            </button>
+        </div>
+    </div>
+
+    @if (!showHistory)
+    {
+        <!-- Sélecteur de date -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
+            <button @onclick="PreviousDay" class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500">
+                ←
+            </button>
+            <div class="text-center">
+                <p class="font-semibold text-gray-800">@selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))</p>
+                @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
+                {
+                    <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">Aujourd'hui</span>
+                }
+            </div>
+            <button @onclick="NextDay"
+                    disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
+                    class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-gray-500">
+                →
+            </button>
+        </div>
+
+        <!-- Entrées du jour par repas -->
+        @foreach (var mealType in Enum.GetValues<MealType>())
+        {
+            var entries = currentLog?.FoodEntries.Where(e => e.MealType == mealType).ToList() ?? [];
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">@MealIcon(mealType)</span>
+                        <span class="font-medium text-gray-700">@MealLabel(mealType)</span>
+                        @if (entries.Count > 0)
+                        {
+                            <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">@entries.Count</span>
+                        }
+                    </div>
+                    <button @onclick="() => OpenAddForm(mealType)"
+                            class="text-xs text-primary-600 hover:text-primary-800 font-medium">
+                        + Ajouter
+                    </button>
+                </div>
+
+                @if (entries.Count > 0)
+                {
+                    <ul class="divide-y divide-gray-50">
+                        @foreach (var entry in entries)
+                        {
+                            <li class="px-4 py-3 flex items-center justify-between group">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-800">@entry.FoodName</p>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        @if (!string.IsNullOrEmpty(entry.Quantity))
+                                        {
+                                            <span class="text-xs text-gray-400">@entry.Quantity</span>
+                                        }
+                                        @if (entry.Time.HasValue)
+                                        {
+                                            <span class="text-xs text-gray-300">@entry.Time.Value.ToString("HH:mm")</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(entry.Notes))
+                                        {
+                                            <span class="text-xs text-gray-400 italic">@entry.Notes</span>
+                                        }
+                                    </div>
+                                </div>
+                                <button @onclick="() => DeleteEntry(entry.Id)"
+                                        class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all text-lg leading-none">
+                                    ×
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <div class="px-4 py-3 text-sm text-gray-300 italic">Aucun aliment enregistré</div>
+                }
+            </div>
+        }
+
+        <!-- Notes du jour -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <label class="block text-sm font-medium text-gray-600 mb-2">Notes du jour</label>
+            <textarea @bind="dayNotes" @onblur="SaveNotes" rows="3"
+                      placeholder="Ressentis, observations, hydratation…"
+                      class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none">
+            </textarea>
+        </div>
+    }
+    else
+    {
+        <!-- Historique -->
+        <HistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
+    }
+</div>
+
+<!-- Modal ajout aliment -->
+@if (showAddForm)
+{
+    <div class="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-gray-800">Ajouter un aliment</h3>
+                <button @onclick="CloseAddForm" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Repas</label>
+                    <select @bind="newEntry.MealType"
+                            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+                        @foreach (var m in Enum.GetValues<MealType>())
+                        {
+                            <option value="@m">@MealLabel(m)</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Aliment *</label>
+                    <input @bind="newEntry.FoodName" type="text" placeholder="ex: Yaourt nature, Pomme, Café…"
+                           class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Quantité</label>
+                        <input @bind="newEntry.Quantity" type="text" placeholder="ex: 200g, 1 bol"
+                               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Heure</label>
+                        <input type="time"
+                               value="@timeInput"
+                               @oninput="@(e => timeInput = e.Value?.ToString() ?? string.Empty)"
+                               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+                    <input @bind="newEntry.Notes" type="text" placeholder="Optionnel"
+                           class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(addError))
+                {
+                    <p class="text-red-500 text-sm">@addError</p>
+                }
+
+                <button @onclick="AddEntry"
+                        class="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-xl font-medium transition-colors">
+                    Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string AccessCode { get; set; } = "";
+
+    FoodDiary? diary;
+    DailyLog? currentLog;
+    DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Today);
+    string dayNotes = "";
+    bool isAuthorized;
+    bool showHistory;
+    bool showAddForm;
+    MealType defaultMealType = MealType.Dejeuner;
+    FoodEntry newEntry = new();
+    string timeInput = "";
+    string addError = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var code = AccessCode.ToUpperInvariant();
+        if (!Session.IsUnlocked(code))
+        {
+            Nav.NavigateTo($"/carnet/{code}", replace: true);
+            return;
+        }
+        isAuthorized = true;
+        diary = await DiaryService.GetDiaryByCodeAsync(code);
+        if (diary != null) await LoadDay();
+    }
+
+    async Task LoadDay()
+    {
+        currentLog = await DiaryService.GetDailyLogWithEntriesAsync(diary!.Id, selectedDate);
+        dayNotes = currentLog?.Notes ?? "";
+    }
+
+    async Task PreviousDay()
+    {
+        selectedDate = selectedDate.AddDays(-1);
+        await LoadDay();
+    }
+
+    async Task NextDay()
+    {
+        if (selectedDate < DateOnly.FromDateTime(DateTime.Today))
+        {
+            selectedDate = selectedDate.AddDays(1);
+            await LoadDay();
+        }
+    }
+
+    void SelectDate(DateOnly date)
+    {
+        selectedDate = date;
+        showHistory = false;
+        _ = LoadDay();
+    }
+
+    void OpenAddForm(MealType mealType)
+    {
+        newEntry = new FoodEntry { MealType = mealType };
+        timeInput = DateTime.Now.ToString("HH:mm");
+        addError = "";
+        showAddForm = true;
+    }
+
+    void CloseAddForm() => showAddForm = false;
+
+    async Task AddEntry()
+    {
+        if (string.IsNullOrWhiteSpace(newEntry.FoodName))
+        {
+            addError = "Le nom de l'aliment est obligatoire.";
+            return;
+        }
+
+        if (TimeOnly.TryParse(timeInput, out var t))
+            newEntry.Time = t;
+
+        if (currentLog == null)
+            currentLog = await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
+
+        await DiaryService.AddFoodEntryAsync(currentLog.Id, newEntry);
+        showAddForm = false;
+        await LoadDay();
+    }
+
+    async Task DeleteEntry(int entryId)
+    {
+        await DiaryService.DeleteFoodEntryAsync(entryId);
+        await LoadDay();
+    }
+
+    async Task SaveNotes()
+    {
+        if (currentLog == null && !string.IsNullOrEmpty(dayNotes))
+            currentLog = await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
+        if (currentLog != null)
+            await DiaryService.UpdateDailyLogNotesAsync(currentLog.Id, dayNotes);
+    }
+
+    static string MealLabel(MealType m) => m switch
+    {
+        MealType.PetitDejeuner => "Petit-déjeuner",
+        MealType.Dejeuner => "Déjeuner",
+        MealType.Diner => "Dîner",
+        MealType.Collation => "Collation",
+        _ => "Autre"
+    };
+
+    static string MealIcon(MealType m) => m switch
+    {
+        MealType.PetitDejeuner => "☕",
+        MealType.Dejeuner => "🍽️",
+        MealType.Diner => "🌙",
+        MealType.Collation => "🍎",
+        _ => "🍴"
+    };
+}

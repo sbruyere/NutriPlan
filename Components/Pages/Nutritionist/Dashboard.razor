@@ -1,0 +1,124 @@
+@page "/nutritionniste/tableau-de-bord"
+@rendermode InteractiveServer
+@inject DiaryService DiaryService
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+
+<PageTitle>Tableau de bord — NutriPlan</PageTitle>
+
+@if (!Session.IsNutritionistLoggedIn)
+{
+    <div class="text-center text-gray-400 py-12">Redirection…</div>
+    return;
+}
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-800">Tableau de bord</h1>
+            <p class="text-gray-400 text-sm">Bonjour, @Session.NutritionistName</p>
+        </div>
+        <a href="/nutritionniste/nouveau-patient"
+           class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-2">
+            <span>+</span> Nouveau patient
+        </a>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-gray-400 text-center py-12">Chargement…</div>
+    }
+    else if (diaries.Count == 0)
+    {
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+            <div class="text-5xl mb-4">👤</div>
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Aucun patient pour l'instant</h2>
+            <p class="text-gray-400 text-sm mb-4">Créez un carnet alimentaire pour votre premier patient.</p>
+            <a href="/nutritionniste/nouveau-patient"
+               class="inline-block bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors">
+                Créer un carnet patient
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            @foreach (var diary in diaries)
+            {
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:border-primary-200 transition-colors">
+                    <div class="p-4">
+                        <div class="flex items-start justify-between mb-3">
+                            <div>
+                                <p class="font-semibold text-gray-800">@(diary.PatientAlias ?? "Patient anonyme")</p>
+                                <p class="text-xs font-mono text-gray-400 mt-0.5">@diary.AccessCode</p>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                @if (diary.PinHash != null)
+                                {
+                                    <span class="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">🔒 PIN</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="text-xs text-gray-400 mb-3">
+                            <span>@diary.DailyLogs.Count jour(s) de suivi</span>
+                            <span class="mx-1">·</span>
+                            <span>Créé le @diary.CreatedAt.ToString("d MMM yyyy", new System.Globalization.CultureInfo("fr-FR"))</span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(diary.Notes))
+                        {
+                            <p class="text-xs text-gray-400 italic mb-3 truncate">@diary.Notes</p>
+                        }
+
+                        <div class="flex gap-2">
+                            <a href="/nutritionniste/patient/@diary.AccessCode"
+                               class="flex-1 text-center bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                                Voir le carnet
+                            </a>
+                            <button @onclick="() => CopyLink(diary.AccessCode)"
+                                    class="flex-1 text-center bg-gray-50 hover:bg-gray-100 text-gray-600 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                                @(copiedCode == diary.AccessCode ? "✓ Copié !" : "Copier le lien")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    List<FoodDiary> diaries = [];
+    bool isLoading = true;
+    string copiedCode = "";
+
+    @inject IJSRuntime JS
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsNutritionistLoggedIn)
+        {
+            Nav.NavigateTo("/nutritionniste/connexion");
+            return;
+        }
+        await LoadDiaries();
+    }
+
+    async Task LoadDiaries()
+    {
+        isLoading = true;
+        diaries = await DiaryService.GetNutritionistDiariesAsync(Session.NutritionistId!.Value);
+        isLoading = false;
+    }
+
+    async Task CopyLink(string code)
+    {
+        var url = Nav.BaseUri.TrimEnd('/') + $"/carnet/{code}";
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        copiedCode = code;
+        await Task.Delay(2000);
+        copiedCode = "";
+        StateHasChanged();
+    }
+}

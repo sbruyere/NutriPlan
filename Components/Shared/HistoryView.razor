@@ -1,0 +1,78 @@
+@rendermode InteractiveServer
+@inject DiaryService DiaryService
+
+@if (logs == null)
+{
+    <div class="text-gray-400 text-center py-8">Chargement de l'historique…</div>
+}
+else if (logs.Count == 0)
+{
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+        <div class="text-4xl mb-3">📅</div>
+        <p class="text-gray-400">Aucune entrée dans votre historique pour le moment.</p>
+    </div>
+}
+else
+{
+    <div class="space-y-3">
+        @foreach (var log in logs)
+        {
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden cursor-pointer hover:border-primary-200 transition-colors"
+                 @onclick="() => OnDateSelected.InvokeAsync(log.Date)">
+                <div class="px-4 py-3 flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-gray-800">
+                            @log.Date.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                        </p>
+                        <p class="text-xs text-gray-400 mt-0.5">@log.FoodEntries.Count aliment(s) enregistré(s)</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1 justify-end max-w-[200px]">
+                        @foreach (var meal in log.FoodEntries.Select(e => e.MealType).Distinct())
+                        {
+                            <span class="text-base" title="@MealLabel(meal)">@MealIcon(meal)</span>
+                        }
+                    </div>
+                </div>
+                @if (log.FoodEntries.Count > 0)
+                {
+                    <div class="px-4 pb-3">
+                        <p class="text-xs text-gray-400 truncate">
+                            @string.Join(", ", log.FoodEntries.Take(5).Select(e => e.FoodName))
+                            @(log.FoodEntries.Count > 5 ? $" +{log.FoodEntries.Count - 5}" : "")
+                        </p>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public int DiaryId { get; set; }
+    [Parameter] public EventCallback<DateOnly> OnDateSelected { get; set; }
+
+    List<DailyLog>? logs;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        logs = await DiaryService.GetAllDailyLogsAsync(DiaryId);
+    }
+
+    static string MealLabel(MealType m) => m switch
+    {
+        MealType.PetitDejeuner => "Petit-déjeuner",
+        MealType.Dejeuner => "Déjeuner",
+        MealType.Diner => "Dîner",
+        MealType.Collation => "Collation",
+        _ => "Autre"
+    };
+
+    static string MealIcon(MealType m) => m switch
+    {
+        MealType.PetitDejeuner => "☕",
+        MealType.Dejeuner => "🍽️",
+        MealType.Diner => "🌙",
+        MealType.Collation => "🍎",
+        _ => "🍴"
+    };
+}

@@ -1,0 +1,62 @@
+@inherits LayoutComponentBase
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="min-h-screen flex flex-col">
+    <header class="bg-primary-600 text-white shadow-md">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 text-xl font-bold tracking-tight hover:text-primary-100 transition-colors">
+                <span class="text-2xl">🥦</span>
+                <span>NutriPlan</span>
+            </a>
+            <nav class="flex items-center gap-3 text-sm">
+                @if (Session.IsNutritionistLoggedIn)
+                {
+                    <span class="hidden sm:inline text-primary-100">@Session.NutritionistName</span>
+                    <a href="/nutritionniste/tableau-de-bord"
+                       class="bg-primary-700 hover:bg-primary-800 px-3 py-1.5 rounded-lg transition-colors">
+                        Tableau de bord
+                    </a>
+                    <button @onclick="Logout"
+                            class="bg-white text-primary-700 hover:bg-primary-50 px-3 py-1.5 rounded-lg transition-colors font-medium">
+                        Déconnexion
+                    </button>
+                }
+                else
+                {
+                    <a href="/nutritionniste/connexion"
+                       class="bg-white text-primary-700 hover:bg-primary-50 px-3 py-1.5 rounded-lg transition-colors font-medium">
+                        Espace nutritionniste
+                    </a>
+                }
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+        @Body
+    </main>
+
+    <footer class="border-t border-gray-200 bg-white text-center text-xs text-gray-400 py-3">
+        NutriPlan &mdash; Cahier de suivi alimentaire
+    </footer>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.OnChange += StateHasChanged;
+    }
+
+    void Logout()
+    {
+        Session.LogoutNutritionist();
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= StateHasChanged;
+    }
+}

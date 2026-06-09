@@ -1,0 +1,158 @@
+@page "/nutritionniste/nouveau-patient"
+@rendermode InteractiveServer
+@inject DiaryService DiaryService
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+
+<PageTitle>Nouveau patient — NutriPlan</PageTitle>
+
+@if (!Session.IsNutritionistLoggedIn)
+{
+    <div class="text-center text-gray-400 py-12">Redirection…</div>
+    return;
+}
+
+<div class="max-w-md mx-auto py-8">
+    <div class="mb-6">
+        <a href="/nutritionniste/tableau-de-bord" class="text-primary-600 hover:underline text-sm flex items-center gap-1">
+            ← Retour au tableau de bord
+        </a>
+    </div>
+
+    @if (createdDiary == null)
+    {
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div class="text-center mb-6">
+                <div class="text-4xl mb-2">👤</div>
+                <h1 class="text-2xl font-bold text-gray-800">Nouveau carnet patient</h1>
+                <p class="text-gray-400 text-sm mt-1">Le patient sera identifié par un alias anonyme.</p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                        Alias patient *
+                    </label>
+                    <input @bind="patientAlias" type="text" placeholder="ex: Patient A, JD2024, Initiales…"
+                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                           maxlength="100" />
+                    <p class="text-gray-400 text-xs mt-1">Seul vous verrez cet alias.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                        Notes (optionnel)
+                    </label>
+                    <textarea @bind="notes" rows="3" placeholder="Objectifs, contexte médical, instructions spéciales…"
+                              class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
+                              maxlength="500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                        Code PIN patient (optionnel)
+                    </label>
+                    <input @bind="pin" type="text" placeholder="4 à 8 chiffres"
+                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                           maxlength="8" />
+                    <p class="text-gray-400 text-xs mt-1">
+                        Partagez ce code avec votre patient pour qu'il accède à son carnet.
+                    </p>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@errorMessage</div>
+                }
+
+                <button @onclick="Create" disabled="@isLoading"
+                        class="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white py-3 rounded-xl font-medium transition-colors">
+                    @(isLoading ? "Création en cours…" : "Créer le carnet")
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div class="text-center mb-6">
+                <div class="text-5xl mb-3">✅</div>
+                <h2 class="text-xl font-bold text-gray-800">Carnet créé !</h2>
+                <p class="text-gray-500 text-sm mt-1">Partagez le lien et le code avec votre patient.</p>
+            </div>
+
+            <div class="space-y-3 mb-6">
+                <div class="bg-gray-50 rounded-xl p-3">
+                    <p class="text-xs text-gray-400 font-medium mb-1">PATIENT</p>
+                    <p class="font-medium text-gray-700">@createdDiary.PatientAlias</p>
+                </div>
+
+                <div class="bg-primary-50 border border-primary-200 rounded-xl p-3">
+                    <p class="text-xs text-primary-500 font-medium mb-1">CODE D'ACCÈS</p>
+                    <p class="text-2xl font-bold text-primary-700 tracking-widest">@createdDiary.AccessCode</p>
+                </div>
+
+                <div class="bg-gray-50 rounded-xl p-3">
+                    <p class="text-xs text-gray-400 font-medium mb-1">LIEN DE PARTAGE</p>
+                    <p class="text-sm text-gray-600 font-mono break-all">@shareUrl</p>
+                </div>
+
+                @if (!string.IsNullOrEmpty(pin))
+                {
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                        <p class="text-xs text-amber-500 font-medium mb-1">CODE PIN DU PATIENT</p>
+                        <p class="text-xl font-bold text-amber-700 tracking-widest">@pin</p>
+                    </div>
+                }
+            </div>
+
+            <div class="flex gap-3">
+                <a href="/nutritionniste/patient/@createdDiary.AccessCode"
+                   class="flex-1 text-center bg-primary-600 hover:bg-primary-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                    Voir le carnet
+                </a>
+                <a href="/nutritionniste/tableau-de-bord"
+                   class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition-colors">
+                    Tableau de bord
+                </a>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    string patientAlias = "", notes = "", pin = "";
+    string errorMessage = "";
+    bool isLoading;
+    FoodDiary? createdDiary;
+    string shareUrl = "";
+
+    protected override void OnInitialized()
+    {
+        if (!Session.IsNutritionistLoggedIn)
+            Nav.NavigateTo("/nutritionniste/connexion");
+    }
+
+    async Task Create()
+    {
+        errorMessage = "";
+        if (string.IsNullOrWhiteSpace(patientAlias))
+        {
+            errorMessage = "L'alias patient est obligatoire.";
+            return;
+        }
+        if (!string.IsNullOrEmpty(pin) && pin.Length < 4)
+        {
+            errorMessage = "Le PIN doit comporter au moins 4 chiffres.";
+            return;
+        }
+        isLoading = true;
+        createdDiary = await DiaryService.CreateNutritionistDiaryAsync(
+            Session.NutritionistId!.Value,
+            patientAlias,
+            string.IsNullOrEmpty(pin) ? null : pin,
+            string.IsNullOrEmpty(notes) ? null : notes);
+        shareUrl = Nav.BaseUri.TrimEnd('/') + $"/carnet/{createdDiary.AccessCode}";
+        isLoading = false;
+    }
+}
