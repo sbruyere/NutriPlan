@@ -40,8 +40,7 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
     public async Task<FoodDiary?> GetDiaryByCodeAsync(string accessCode)
     {
         await using var ctx = await factory.CreateDbContextAsync();
-        return await ctx.FoodDiaries
-            .FirstOrDefaultAsync(d => d.AccessCode == accessCode);
+        return await ctx.FoodDiaries.FirstOrDefaultAsync(d => d.AccessCode == accessCode);
     }
 
     public async Task<bool> ValidatePinAsync(string accessCode, string pin)
@@ -57,9 +56,8 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
     {
         await using var ctx = await factory.CreateDbContextAsync();
         var log = await ctx.DailyLogs
-            .Include(l => l.FoodEntries)
+            .Include(l => l.MealLogs).ThenInclude(m => m.FoodEntries)
             .FirstOrDefaultAsync(l => l.FoodDiaryId == diaryId && l.Date == date);
-
         if (log != null) return log;
 
         log = new DailyLog { FoodDiaryId = diaryId, Date = date };
@@ -68,11 +66,12 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         return log;
     }
 
-    public async Task<DailyLog?> GetDailyLogWithEntriesAsync(int diaryId, DateOnly date)
+    public async Task<DailyLog?> GetDailyLogFullAsync(int diaryId, DateOnly date)
     {
         await using var ctx = await factory.CreateDbContextAsync();
         return await ctx.DailyLogs
-            .Include(l => l.FoodEntries.OrderBy(e => e.Time))
+            .Include(l => l.MealLogs.OrderBy(m => m.SortOrder))
+                .ThenInclude(m => m.FoodEntries.OrderBy(e => e.CreatedAt))
             .FirstOrDefaultAsync(l => l.FoodDiaryId == diaryId && l.Date == date);
     }
 
@@ -80,16 +79,46 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
     {
         await using var ctx = await factory.CreateDbContextAsync();
         return await ctx.DailyLogs
-            .Include(l => l.FoodEntries)
+            .Include(l => l.MealLogs).ThenInclude(m => m.FoodEntries)
             .Where(l => l.FoodDiaryId == diaryId)
             .OrderByDescending(l => l.Date)
             .ToListAsync();
     }
 
-    public async Task AddFoodEntryAsync(int dailyLogId, FoodEntry entry)
+    public async Task<MealLog> GetOrCreateMealLogAsync(int dailyLogId, MealType mealType)
     {
         await using var ctx = await factory.CreateDbContextAsync();
-        entry.DailyLogId = dailyLogId;
+        var meal = await ctx.MealLogs
+            .Include(m => m.FoodEntries)
+            .FirstOrDefaultAsync(m => m.DailyLogId == dailyLogId && m.MealType == mealType);
+        if (meal != null) return meal;
+
+        meal = new MealLog
+        {
+            DailyLogId = dailyLogId,
+            MealType = mealType,
+            SortOrder = (int)mealType
+        };
+        ctx.MealLogs.Add(meal);
+        await ctx.SaveChangesAsync();
+        return meal;
+    }
+
+    public async Task UpdateMealLogAsync(int mealLogId, int? hungerBefore, int? satietyAfter, string? betweenMealSensations)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        var meal = await ctx.MealLogs.FindAsync(mealLogId);
+        if (meal == null) return;
+        meal.HungerBefore = hungerBefore;
+        meal.SatietyAfter = satietyAfter;
+        meal.BetweenMealSensations = betweenMealSensations;
+        await ctx.SaveChangesAsync();
+    }
+
+    public async Task AddFoodEntryAsync(int mealLogId, FoodEntry entry)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        entry.MealLogId = mealLogId;
         entry.CreatedAt = DateTime.UtcNow;
         ctx.FoodEntries.Add(entry);
         await ctx.SaveChangesAsync();
@@ -99,22 +128,19 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
     {
         await using var ctx = await factory.CreateDbContextAsync();
         var entry = await ctx.FoodEntries.FindAsync(entryId);
-        if (entry != null)
-        {
-            ctx.FoodEntries.Remove(entry);
-            await ctx.SaveChangesAsync();
-        }
+        if (entry != null) { ctx.FoodEntries.Remove(entry); await ctx.SaveChangesAsync(); }
     }
 
-    public async Task UpdateDailyLogNotesAsync(int logId, string? notes)
+    public async Task UpdateDailyLogSummaryAsync(int logId, string? hydration, string? emotions, string? physicalActivity, string? notes)
     {
         await using var ctx = await factory.CreateDbContextAsync();
         var log = await ctx.DailyLogs.FindAsync(logId);
-        if (log != null)
-        {
-            log.Notes = notes;
-            await ctx.SaveChangesAsync();
-        }
+        if (log == null) return;
+        log.Hydration = hydration;
+        log.Emotions = emotions;
+        log.PhysicalActivity = physicalActivity;
+        log.GeneralNotes = notes;
+        await ctx.SaveChangesAsync();
     }
 
     public async Task<List<FoodDiary>> GetNutritionistDiariesAsync(int nutritionistId)
@@ -130,14 +156,8 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
     public async Task DeleteDiaryAsync(int diaryId)
     {
         await using var ctx = await factory.CreateDbContextAsync();
-        var diary = await ctx.FoodDiaries
-            .Include(d => d.DailyLogs).ThenInclude(l => l.FoodEntries)
-            .FirstOrDefaultAsync(d => d.Id == diaryId);
-        if (diary != null)
-        {
-            ctx.FoodDiaries.Remove(diary);
-            await ctx.SaveChangesAsync();
-        }
+        var diary = await ctx.FoodDiaries.FindAsync(diaryId);
+        if (diary != null) { ctx.FoodDiaries.Remove(diary); await ctx.SaveChangesAsync(); }
     }
 
     private static string GenerateAccessCode()

@@ -17,29 +17,52 @@ else
     <div class="space-y-3">
         @foreach (var log in logs)
         {
+            var entryCount = log.MealLogs.Sum(m => m.FoodEntries.Count);
+            var mealsWithFood = log.MealLogs.Where(m => m.FoodEntries.Count > 0).ToList();
+            var allFoods = log.MealLogs.SelectMany(m => m.FoodEntries).ToList();
+
             <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden cursor-pointer hover:border-primary-200 transition-colors"
                  @onclick="() => OnDateSelected.InvokeAsync(log.Date)">
                 <div class="px-4 py-3 flex items-center justify-between">
                     <div>
-                        <p class="font-medium text-gray-800">
+                        <p class="font-medium text-gray-800 capitalize">
                             @log.Date.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
                         </p>
-                        <p class="text-xs text-gray-400 mt-0.5">@log.FoodEntries.Count aliment(s) enregistré(s)</p>
+                        <p class="text-xs text-gray-400 mt-0.5">
+                            @entryCount aliment(s) · @mealsWithFood.Count repas
+                        </p>
                     </div>
-                    <div class="flex flex-wrap gap-1 justify-end max-w-[200px]">
-                        @foreach (var meal in log.FoodEntries.Select(e => e.MealType).Distinct())
+                    <div class="flex flex-wrap gap-1 justify-end max-w-[160px]">
+                        @foreach (var meal in mealsWithFood)
                         {
-                            <span class="text-base" title="@MealLabel(meal)">@MealIcon(meal)</span>
+                            <span class="text-base" title="@MealLabel(meal.MealType)">@MealIcon(meal.MealType)</span>
                         }
                     </div>
                 </div>
-                @if (log.FoodEntries.Count > 0)
+                @if (allFoods.Count > 0)
                 {
                     <div class="px-4 pb-3">
                         <p class="text-xs text-gray-400 truncate">
-                            @string.Join(", ", log.FoodEntries.Take(5).Select(e => e.FoodName))
-                            @(log.FoodEntries.Count > 5 ? $" +{log.FoodEntries.Count - 5}" : "")
+                            @string.Join(", ", allFoods.Take(6).Select(e => e.FoodName))
+                            @(allFoods.Count > 6 ? $" +{allFoods.Count - 6}" : "")
                         </p>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(log.Hydration) || !string.IsNullOrEmpty(log.Emotions) || !string.IsNullOrEmpty(log.PhysicalActivity))
+                {
+                    <div class="px-4 pb-3 flex flex-wrap gap-2">
+                        @if (!string.IsNullOrEmpty(log.Hydration))
+                        {
+                            <span class="text-xs bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full">💧 @log.Hydration</span>
+                        }
+                        @if (!string.IsNullOrEmpty(log.PhysicalActivity))
+                        {
+                            <span class="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">🏃 @log.PhysicalActivity</span>
+                        }
+                        @if (!string.IsNullOrEmpty(log.Emotions))
+                        {
+                            <span class="text-xs bg-purple-50 text-purple-500 px-2 py-0.5 rounded-full">🧘 @log.Emotions</span>
+                        }
                     </div>
                 }
             </div>
@@ -53,26 +76,27 @@ else
 
     List<DailyLog>? logs;
 
-    protected override async Task OnParametersSetAsync()
-    {
+    protected override async Task OnParametersSetAsync() =>
         logs = await DiaryService.GetAllDailyLogsAsync(DiaryId);
-    }
 
     static string MealLabel(MealType m) => m switch
     {
-        MealType.PetitDejeuner => "Petit-déjeuner",
-        MealType.Dejeuner => "Déjeuner",
-        MealType.Diner => "Dîner",
-        MealType.Collation => "Collation",
+        MealType.PetitDejeuner      => "Petit-déjeuner",
+        MealType.CollationMatin     => "Collation matin",
+        MealType.Dejeuner           => "Déjeuner",
+        MealType.CollationApresMidi => "Collation après-midi",
+        MealType.Diner              => "Dîner",
+        MealType.CollationSoir      => "Collation soir",
         _ => "Autre"
     };
-
     static string MealIcon(MealType m) => m switch
     {
-        MealType.PetitDejeuner => "☕",
-        MealType.Dejeuner => "🍽️",
-        MealType.Diner => "🌙",
-        MealType.Collation => "🍎",
+        MealType.PetitDejeuner      => "☕",
+        MealType.CollationMatin     => "🍎",
+        MealType.Dejeuner           => "🍽️",
+        MealType.CollationApresMidi => "🫐",
+        MealType.Diner              => "🌙",
+        MealType.CollationSoir      => "🌛",
         _ => "🍴"
     };
 }

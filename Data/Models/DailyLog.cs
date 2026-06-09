@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace NutriPlan.Data.Models;
 
 public class DailyLog
@@ -9,7 +11,17 @@ public class DailyLog
 
     public DateOnly Date { get; set; }
 
-    public string? Notes { get; set; }
+    [MaxLength(300)]
+    public string? Hydration { get; set; }
 
-    public ICollection<FoodEntry> FoodEntries { get; set; } = [];
+    [MaxLength(500)]
+    public string? Emotions { get; set; }
+
+    [MaxLength(300)]
+    public string? PhysicalActivity { get; set; }
+
+    [MaxLength(500)]
+    public string? GeneralNotes { get; set; }
+
+    public ICollection<MealLog> MealLogs { get; set; } = [];
 }

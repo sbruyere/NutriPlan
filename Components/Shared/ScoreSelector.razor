@@ -1,0 +1,51 @@
+@rendermode InteractiveServer
+
+<div class="flex items-center gap-1 flex-wrap">
+    @for (int i = 1; i <= 10; i++)
+    {
+        var score = i;
+        var isSelected = Value == score;
+        var colorClass = GetColorClass(score, isSelected);
+        <button @onclick="() => SelectScore(score)"
+                class="w-8 h-8 rounded-lg text-xs font-semibold transition-all @colorClass">
+            @score
+        </button>
+    }
+    @if (Value.HasValue)
+    {
+        <button @onclick="ClearScore"
+                class="text-xs text-gray-300 hover:text-gray-500 ml-1 transition-colors">
+            ×
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public EventCallback<int?> OnChange { get; set; }
+
+    async Task SelectScore(int score)
+    {
+        Value = score;
+        await OnChange.InvokeAsync(score);
+    }
+
+    async Task ClearScore()
+    {
+        Value = null;
+        await OnChange.InvokeAsync(null);
+    }
+
+    string GetColorClass(int score, bool selected)
+    {
+        if (!selected)
+            return "bg-gray-100 text-gray-400 hover:bg-gray-200";
+
+        return score switch
+        {
+            <= 3 => "bg-green-500 text-white shadow-sm",
+            <= 6 => "bg-amber-400 text-white shadow-sm",
+            _ => "bg-red-400 text-white shadow-sm"
+        };
+    }
+}

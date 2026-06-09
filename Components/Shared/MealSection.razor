@@ -1,0 +1,230 @@
+@rendermode InteractiveServer
+
+<div class="bg-white rounded-2xl border @(IsExpanded ? "border-primary-200" : "border-gray-100") shadow-sm overflow-hidden transition-all">
+
+    <!-- En-tête du repas -->
+    <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            @onclick="ToggleExpand">
+        <div class="flex items-center gap-2">
+            <span class="text-xl">@MealIcon</span>
+            <span class="font-medium text-gray-700">@MealLabel</span>
+            @if (MealLog != null && MealLog.FoodEntries.Count > 0)
+            {
+                <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">
+                    @MealLog.FoodEntries.Count aliment(s)
+                </span>
+            }
+            @if (MealLog?.HungerBefore.HasValue == true)
+            {
+                <span class="hidden sm:inline text-xs text-gray-400">
+                    Faim: <span class="font-medium text-gray-600">@MealLog.HungerBefore/10</span>
+                </span>
+            }
+            @if (MealLog?.SatietyAfter.HasValue == true)
+            {
+                <span class="hidden sm:inline text-xs text-gray-400">
+                    Rassasiement: <span class="font-medium text-gray-600">@MealLog.SatietyAfter/10</span>
+                </span>
+            }
+        </div>
+        <span class="text-gray-400 text-sm transition-transform @(IsExpanded ? "rotate-180" : "")">▼</span>
+    </button>
+
+    @if (IsExpanded)
+    {
+        <div class="border-t border-gray-50 divide-y divide-gray-50">
+
+            <!-- Faim avant le repas -->
+            <div class="px-4 py-3">
+                <p class="text-xs font-medium text-gray-500 mb-2">
+                    Évaluation de la faim <span class="font-normal text-gray-400">(avant le repas)</span>
+                </p>
+                <ScoreSelector Value="@hungerBefore" OnChange="@(v => { hungerBefore = v; _ = SaveScores(); })" />
+            </div>
+
+            <!-- Liste des aliments -->
+            <div class="px-4 py-3">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-xs font-medium text-gray-500">Aliments consommés</p>
+                    <button @onclick="OpenAddForm"
+                            class="text-xs text-primary-600 hover:text-primary-800 font-medium flex items-center gap-1">
+                        + Ajouter
+                    </button>
+                </div>
+
+                @if (MealLog == null || MealLog.FoodEntries.Count == 0)
+                {
+                    <p class="text-xs text-gray-300 italic py-1">Aucun aliment enregistré</p>
+                }
+                else
+                {
+                    <div class="space-y-1">
+                        @foreach (var entry in MealLog.FoodEntries)
+                        {
+                            <div class="flex items-start justify-between group bg-gray-50 rounded-xl px-3 py-2">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-800 truncate">@entry.FoodName</p>
+                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                                        @if (!string.IsNullOrEmpty(entry.Quantity))
+                                        {
+                                            <span class="text-xs text-gray-500">📏 @entry.Quantity</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(entry.PreparationMethod))
+                                        {
+                                            <span class="text-xs text-gray-400 italic">🍳 @entry.PreparationMethod</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(entry.Notes))
+                                        {
+                                            <span class="text-xs text-gray-400">@entry.Notes</span>
+                                        }
+                                    </div>
+                                </div>
+                                <button @onclick="() => OnDeleteFood.InvokeAsync(entry.Id)"
+                                        class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 ml-2 text-lg leading-none transition-opacity flex-shrink-0">
+                                    ×
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Rassasiement après le repas -->
+            <div class="px-4 py-3">
+                <p class="text-xs font-medium text-gray-500 mb-2">
+                    Évaluation du rassasiement <span class="font-normal text-gray-400">(après le repas)</span>
+                </p>
+                <ScoreSelector Value="@satietyAfter" OnChange="@(v => { satietyAfter = v; _ = SaveScores(); })" />
+            </div>
+
+            <!-- Sensations entre les repas -->
+            <div class="px-4 py-3">
+                <label class="block text-xs font-medium text-gray-500 mb-1.5">
+                    Sensations perçues <span class="font-normal text-gray-400">(entre les repas)</span>
+                </label>
+                <input @bind="betweenSensations" @onblur="SaveScores"
+                       type="text"
+                       placeholder="Inconfort digestif, nausée, gêne, ballonnements…"
+                       class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Modal ajout aliment -->
+@if (showAddForm)
+{
+    <div class="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-gray-800 flex items-center gap-2">
+                    <span>@MealIcon</span> @MealLabel
+                </h3>
+                <button @onclick="CloseAddForm" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Aliment ou préparation *</label>
+                    <input @bind="newFoodName" type="text"
+                           placeholder="ex: Yaourt nature, Salade verte, Poulet rôti…"
+                           class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Quantité</label>
+                        <input @bind="newQuantity" type="text"
+                               placeholder="ex: 200g, ½ assiette, 1 bol…"
+                               class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Mode de préparation</label>
+                        <input @bind="newPreparation" type="text"
+                               placeholder="ex: Vapeur, Grillé, Cru…"
+                               class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+                    <input @bind="newNotes" type="text" placeholder="Optionnel"
+                           class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(addError))
+                {
+                    <p class="text-red-500 text-sm">@addError</p>
+                }
+
+                <div class="flex gap-3 pt-1">
+                    <button @onclick="CloseAddForm"
+                            class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition-colors">
+                        Annuler
+                    </button>
+                    <button @onclick="SubmitFoodEntry"
+                            class="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                        Ajouter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public MealType MealType { get; set; }
+    [Parameter, EditorRequired] public string MealLabel { get; set; } = "";
+    [Parameter, EditorRequired] public string MealIcon { get; set; } = "";
+    [Parameter] public MealLog? MealLog { get; set; }
+    [Parameter] public EventCallback<(int?, int?, string?)> OnSave { get; set; }
+    [Parameter] public EventCallback<FoodEntry> OnAddFood { get; set; }
+    [Parameter] public EventCallback<int> OnDeleteFood { get; set; }
+
+    bool IsExpanded;
+    int? hungerBefore;
+    int? satietyAfter;
+    string betweenSensations = "";
+
+    bool showAddForm;
+    string newFoodName = "", newQuantity = "", newPreparation = "", newNotes = "", addError = "";
+
+    protected override void OnParametersSet()
+    {
+        hungerBefore = MealLog?.HungerBefore;
+        satietyAfter = MealLog?.SatietyAfter;
+        betweenSensations = MealLog?.BetweenMealSensations ?? "";
+
+        if (MealLog?.FoodEntries.Count > 0 || MealLog?.HungerBefore.HasValue == true)
+            IsExpanded = true;
+    }
+
+    void ToggleExpand() => IsExpanded = !IsExpanded;
+
+    async Task SaveScores() =>
+        await OnSave.InvokeAsync((hungerBefore, satietyAfter, string.IsNullOrWhiteSpace(betweenSensations) ? null : betweenSensations));
+
+    void OpenAddForm()
+    {
+        newFoodName = newQuantity = newPreparation = newNotes = addError = "";
+        showAddForm = true;
+    }
+
+    void CloseAddForm() => showAddForm = false;
+
+    async Task SubmitFoodEntry()
+    {
+        if (string.IsNullOrWhiteSpace(newFoodName))
+        {
+            addError = "Le nom de l'aliment est obligatoire.";
+            return;
+        }
+        var entry = new FoodEntry
+        {
+            FoodName = newFoodName.Trim(),
+            Quantity = string.IsNullOrWhiteSpace(newQuantity) ? null : newQuantity.Trim(),
+            PreparationMethod = string.IsNullOrWhiteSpace(newPreparation) ? null : newPreparation.Trim(),
+            Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim()
+        };
+        showAddForm = false;
+        await OnAddFood.InvokeAsync(entry);
+    }
+}

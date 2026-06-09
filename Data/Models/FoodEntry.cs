@@ -4,19 +4,20 @@ namespace NutriPlan.Data.Models;
 
 public enum MealType
 {
-    PetitDejeuner,
-    Dejeuner,
-    Diner,
-    Collation,
-    Autre
+    PetitDejeuner = 0,
+    CollationMatin = 1,
+    Dejeuner = 2,
+    CollationApresMidi = 3,
+    Diner = 4,
+    CollationSoir = 5
 }
 
 public class FoodEntry
 {
     public int Id { get; set; }
 
-    public int DailyLogId { get; set; }
-    public DailyLog DailyLog { get; set; } = null!;
+    public int MealLogId { get; set; }
+    public MealLog MealLog { get; set; } = null!;
 
     [Required, MaxLength(200)]
     public string FoodName { get; set; } = "";
@@ -24,9 +25,8 @@ public class FoodEntry
     [MaxLength(100)]
     public string? Quantity { get; set; }
 
-    public MealType MealType { get; set; }
-
-    public TimeOnly? Time { get; set; }
+    [MaxLength(200)]
+    public string? PreparationMethod { get; set; }
 
     [MaxLength(500)]
     public string? Notes { get; set; }
