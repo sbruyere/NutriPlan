@@ -25,10 +25,26 @@
             <h1 class="text-lg font-bold text-gray-800">Mon carnet alimentaire</h1>
             <p class="text-xs text-gray-400 font-mono">@AccessCode</p>
         </div>
-        <button @onclick="() => showHistory = !showHistory"
-                class="text-sm text-primary-600 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
-            @(showHistory ? "Vue journée" : "Historique")
-        </button>
+        <div class="flex items-center gap-2">
+            @if (!showHistory)
+            {
+                <!-- Bascule vue carte / tableau -->
+                <div class="flex bg-gray-100 rounded-lg p-0.5 text-xs font-medium">
+                    <button @onclick="() => tableView = false"
+                            class="px-3 py-1.5 rounded-md transition-colors @(tableView ? "text-gray-500" : "bg-white shadow text-gray-800")">
+                        ☰ Cartes
+                    </button>
+                    <button @onclick="() => tableView = true"
+                            class="px-3 py-1.5 rounded-md transition-colors @(tableView ? "bg-white shadow text-gray-800" : "text-gray-500")">
+                        ⊞ Tableau
+                    </button>
+                </div>
+            }
+            <button @onclick="() => showHistory = !showHistory"
+                    class="text-sm text-primary-600 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
+                @(showHistory ? "← Journée" : "Historique")
+            </button>
+        </div>
     </div>
 
     @if (showHistory)
@@ -53,62 +69,73 @@
                     class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 text-gray-500 transition-colors">→</button>
         </div>
 
-        <!-- Sections repas -->
-        @foreach (var mealDef in MealDefinitions)
+        @if (tableView)
         {
-            var mealLog = currentLog?.MealLogs.FirstOrDefault(m => m.MealType == mealDef.Type);
-            <MealSection
-                MealType="@mealDef.Type"
-                MealLabel="@mealDef.Label"
-                MealIcon="@mealDef.Icon"
-                MealLog="@mealLog"
-                OnSave="@(async (args) => await SaveMealSection(mealDef.Type, args))"
-                OnAddFood="@(async (entry) => await AddFoodEntry(mealDef.Type, entry))"
-                OnDeleteFood="@(async (id) => await DeleteFoodEntry(id))" />
-        }
+            <!-- Vue tableau -->
+            <DiaryTableView
+                DailyLog="@currentLog"
+                DiaryId="@diary.Id"
+                Date="@selectedDate"
+                OnChanged="@LoadDay" />
 
-        <!-- Résumé de la journée -->
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h3 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                <span>📊</span> Bilan de la journée
-            </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1.5">
-                        💧 Hydratation
-                    </label>
-                    <input @bind="hydration" @onblur="SaveDaySummary"
-                           type="text" placeholder="ex: 6 verres, 1,5L d'eau, 2 cafés…"
-                           class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
-                    <p class="text-xs text-gray-300 mt-1">Eau, thé, tisanes, café, autre</p>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1.5">
-                        🧘 Émotions / Stress
-                    </label>
-                    <textarea @bind="emotions" @onblur="SaveDaySummary" rows="2"
-                              placeholder="Comment vous sentez-vous ?"
-                              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1.5">
-                        🏃 Sport / Activité physique
-                    </label>
-                    <textarea @bind="physicalActivity" @onblur="SaveDaySummary" rows="2"
-                              placeholder="Type, durée, intensité…"
-                              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
-                </div>
+            <!-- Notes générales (hors tableau) -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <label class="block text-xs font-medium text-gray-500 mb-1.5">📝 Notes générales</label>
+                <textarea @bind="generalNotes" @onblur="SaveDaySummary" rows="2"
+                          placeholder="Observations, remarques…"
+                          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
             </div>
-            @if (!string.IsNullOrEmpty(generalNotes) || true)
+        }
+        else
+        {
+            <!-- Vue cartes -->
+            @foreach (var mealDef in MealDefinitions)
             {
+                var mealLog = currentLog?.MealLogs.FirstOrDefault(m => m.MealType == mealDef.Type);
+                <MealSection
+                    MealType="@mealDef.Type"
+                    MealLabel="@mealDef.Label"
+                    MealIcon="@mealDef.Icon"
+                    MealLog="@mealLog"
+                    OnSave="@(async (args) => await SaveMealSection(mealDef.Type, args))"
+                    OnAddFood="@(async (entry) => await AddFoodEntry(mealDef.Type, entry))"
+                    OnDeleteFood="@(async (id) => await DeleteFoodEntry(id))" />
+            }
+
+            <!-- Résumé de la journée -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <h3 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                    <span>📊</span> Bilan de la journée
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1.5">💧 Hydratation</label>
+                        <input @bind="hydration" @onblur="SaveDaySummary" type="text"
+                               placeholder="ex: 6 verres, 1,5L d'eau, 2 cafés…"
+                               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                        <p class="text-xs text-gray-300 mt-1">Eau, thé, tisanes, café, autre</p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1.5">🧘 Émotions / Stress</label>
+                        <textarea @bind="emotions" @onblur="SaveDaySummary" rows="2"
+                                  placeholder="Comment vous sentez-vous ?"
+                                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1.5">🏃 Sport / Activité physique</label>
+                        <textarea @bind="physicalActivity" @onblur="SaveDaySummary" rows="2"
+                                  placeholder="Type, durée, intensité…"
+                                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
+                    </div>
+                </div>
                 <div class="mt-3">
                     <label class="block text-xs font-medium text-gray-500 mb-1.5">📝 Notes générales</label>
                     <textarea @bind="generalNotes" @onblur="SaveDaySummary" rows="2"
                               placeholder="Observations, remarques…"
                               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
                 </div>
-            }
-        </div>
+            </div>
+        }
     }
 </div>
 
@@ -120,6 +147,7 @@
     DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Today);
     bool isAuthorized;
     bool showHistory;
+    bool tableView;
 
     string hydration = "", emotions = "", physicalActivity = "", generalNotes = "";
 
