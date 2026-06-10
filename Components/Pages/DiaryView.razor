@@ -110,7 +110,6 @@ else
             {
                 <!-- Frise verticale -->
                 <div class="relative">
-                    <!-- Ligne verticale -->
                     <div class="absolute left-4 top-4 bottom-4 w-px bg-slate-200 z-0"></div>
 
                     <div class="space-y-1">
@@ -119,39 +118,51 @@ else
                             int slotIdx = si;
                             var slot = DiaryService.MealSlots[slotIdx];
                             var mealEvent = GetMealSlotEvent(slotIdx);
-                            var activities = GetActivitiesAfterSlot(slotIdx == 0 ? null : slotIdx - 1);
 
-                            <!-- Activités avant ce jalon (sauf pour le premier : affichées après le jalon précédent) -->
+                            <!-- Activités + zone de dépôt AVANT le premier jalon -->
                             @if (slotIdx == 0)
                             {
-                                <!-- Activités avant le premier jalon -->
                                 var before = GetActivitiesBeforeAll();
                                 @foreach (var act in before)
                                 {
-                                    <div class="flex gap-2 items-start pl-10 mb-1.5">
-                                        <EventCard Event="act" OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                    var a = act;
+                                    <div class="pl-10 mb-1" draggable="true"
+                                         @ondragstart="() => StartDrag(a)" @ondragend="EndDrag"
+                                         style="@DragStyle(a.Id)">
+                                        <EventCard Event="a" OnChanged="LoadDay" OnDelete="DeleteEvent" />
                                     </div>
                                 }
-                                @if (before.Any())
-                                {
-                                    <div class="pl-10 mb-1.5">
-                                        <button @onclick="() => AddActivity(null)" class="@AddActivityBtnClass">+ Activité</button>
-                                    </div>
-                                }
+                                <div class="pl-10 mb-1">
+                                    <!-- zone dépôt activité avant slot 0 (index -1) -->
+                                    @if (draggedEvent?.EventType == DayEventType.Activity)
+                                    {
+                                        <div class="@ActDropZoneClass(-1) mb-1 rounded-lg transition-all duration-150 text-center text-[10px] text-primary-400"
+                                             @ondragover:preventDefault="true"
+                                             @ondragover="() => actDropTarget = -1"
+                                             @ondragleave="() => ClearActDrop(-1)"
+                                             @ondrop="async () => await HandleActivityDrop(null)">
+                                            @if (actDropTarget == -1) { <span>Déposer ici</span> }
+                                        </div>
+                                    }
+                                    <button @onclick="() => AddActivity(null)" class="@AddActivityBtnClass">+ Activité</button>
+                                </div>
                             }
 
                             <!-- Nœud du jalon alimentaire -->
-                            <div class="flex gap-2.5 items-start relative z-10 mb-0.5">
-                                <!-- Icône sur la frise -->
-                                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white border-2 @SlotBorderClass(slotIdx) flex items-center justify-center text-sm shadow-sm z-10">
+                            <div class="flex gap-2.5 items-start relative z-10 mb-0.5"
+                                 @ondragover:preventDefault="true"
+                                 @ondragover="() => OnMealSlotDragOver(slotIdx)"
+                                 @ondragleave="() => OnMealSlotDragLeave(slotIdx)"
+                                 @ondrop="async () => await HandleMealDrop(slotIdx)">
+                                <!-- Icône -->
+                                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white border-2 @SlotBorderClass(slotIdx) flex items-center justify-center text-sm shadow-sm z-10 transition-all @(mealDropTarget == slotIdx ? "ring-2 ring-primary-400 scale-110" : "")">
                                     @slot.Icon
                                 </div>
                                 <!-- Contenu -->
                                 <div class="flex-1 min-w-0">
                                     @if (mealEvent == null)
                                     {
-                                        <!-- Jalon vide -->
-                                        <div class="bg-white rounded-xl border border-dashed border-slate-200 px-3 py-2 flex items-center gap-2">
+                                        <div class="bg-white rounded-xl border @(mealDropTarget == slotIdx ? "border-primary-300 bg-primary-50/40" : "border-dashed border-slate-200") px-3 py-2 flex items-center gap-2 transition-colors">
                                             <div class="flex-1 min-w-0">
                                                 <p class="font-medium text-gray-400 text-sm">@slot.Label</p>
                                                 <p class="text-[10px] text-gray-300 font-mono">@slot.DefaultTime.ToString("HH:mm")</p>
@@ -164,22 +175,40 @@ else
                                     }
                                     else
                                     {
-                                        <EventCard Event="mealEvent"
-                                                   ConcurrentActivities="@GetConcurrentActivities(slotIdx)"
-                                                   OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                        <div draggable="true"
+                                             @ondragstart="() => StartDrag(mealEvent)"
+                                             @ondragend="EndDrag"
+                                             style="@DragStyle(mealEvent.Id) cursor:grab">
+                                            <EventCard Event="mealEvent"
+                                                       ConcurrentActivities="@GetConcurrentActivities(slotIdx)"
+                                                       OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                        </div>
                                     }
                                 </div>
                             </div>
 
-                            <!-- Zone inter-jalons (activités + bouton ajouter) -->
-                            <div class="pl-10 py-1 space-y-1.5">
+                            <!-- Zone inter-jalons : activités draggables + zone de dépôt -->
+                            <div class="pl-10 py-0.5 space-y-1.5">
                                 @foreach (var act in GetActivitiesAfterSlot(slotIdx))
                                 {
-                                    <EventCard Event="act" OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                    var a = act;
+                                    <div draggable="true"
+                                         @ondragstart="() => StartDrag(a)" @ondragend="EndDrag"
+                                         style="@DragStyle(a.Id) cursor:grab">
+                                        <EventCard Event="a" OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                    </div>
                                 }
-                                <button @onclick="() => AddActivity(slotIdx)" class="@AddActivityBtnClass">
-                                    + Activité sportive
-                                </button>
+                                @if (draggedEvent?.EventType == DayEventType.Activity)
+                                {
+                                    <div class="@ActDropZoneClass(slotIdx) rounded-lg transition-all duration-150 text-center text-[10px] text-primary-400"
+                                         @ondragover:preventDefault="true"
+                                         @ondragover="() => actDropTarget = slotIdx"
+                                         @ondragleave="() => ClearActDrop(slotIdx)"
+                                         @ondrop="async () => await HandleActivityDrop(slotIdx)">
+                                        @if (actDropTarget == slotIdx) { <span>Déposer ici</span> }
+                                    </div>
+                                }
+                                <button @onclick="() => AddActivity(slotIdx)" class="@AddActivityBtnClass">+ Activité sportive</button>
                             </div>
                         }
                     </div>
@@ -237,6 +266,42 @@ else
 
     const string AddActivityBtnClass =
         "w-full border border-dashed border-gray-200 hover:border-green-300 text-gray-300 hover:text-green-500 rounded-xl py-1.5 text-xs font-medium transition-colors";
+
+    // ── Drag & drop ──────────────────────────────────────────────────────────
+    DayEvent? draggedEvent;
+    int? actDropTarget;   // -1 = avant slot 0 ; 0-5 = après slot n
+    int? mealDropTarget;  // slot cible pour un jalon repas
+
+    void StartDrag(DayEvent evt) { draggedEvent = evt; actDropTarget = null; mealDropTarget = null; }
+    void EndDrag() { draggedEvent = null; actDropTarget = null; mealDropTarget = null; }
+
+    void OnMealSlotDragOver(int slotIdx)  { if (draggedEvent?.EventType == DayEventType.Meal)     mealDropTarget = slotIdx; }
+    void OnMealSlotDragLeave(int slotIdx) { if (mealDropTarget == slotIdx) mealDropTarget = null; }
+    void ClearActDrop(int zoneId)         { if (actDropTarget == zoneId)   actDropTarget  = null; }
+
+    string DragStyle(int id) => draggedEvent?.Id == id ? "opacity:0.35;" : "";
+    string ActDropZoneClass(int zoneId) => actDropTarget == zoneId
+        ? "border border-dashed border-primary-300 bg-primary-50/50 py-2"
+        : "border border-dashed border-transparent py-0.5";
+
+    async Task HandleActivityDrop(int? afterSlot)
+    {
+        if (draggedEvent == null || draggedEvent.EventType != DayEventType.Activity) return;
+        actDropTarget = null;
+        await DiaryService.MoveActivityAsync(draggedEvent.Id, afterSlot);
+        draggedEvent = null;
+        await LoadDay();
+    }
+
+    async Task HandleMealDrop(int targetSlot)
+    {
+        if (draggedEvent == null || draggedEvent.EventType != DayEventType.Meal) return;
+        if (draggedEvent.MealSlot == targetSlot) { mealDropTarget = null; return; }
+        mealDropTarget = null;
+        await DiaryService.SwapOrMoveMealSlotAsync(draggedEvent.Id, targetSlot);
+        draggedEvent = null;
+        await LoadDay();
+    }
 
     protected override async Task OnParametersSetAsync()
     {

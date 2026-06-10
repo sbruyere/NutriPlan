@@ -268,6 +268,31 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory, IWebHostE
         if (evt != null) { ctx.DayEvents.Remove(evt); await ctx.SaveChangesAsync(); }
     }
 
+    public async Task MoveActivityAsync(int eventId, int? newAfterSlot)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        var evt = await ctx.DayEvents.FindAsync(eventId);
+        if (evt == null || evt.EventType != DayEventType.Activity) return;
+        evt.ActivityAfterSlot = newAfterSlot;
+        evt.ConcurrentWithMealSlot = null;
+        await ctx.SaveChangesAsync();
+    }
+
+    public async Task SwapOrMoveMealSlotAsync(int eventId, int targetSlot)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        var source = await ctx.DayEvents.FindAsync(eventId);
+        if (source == null || !source.MealSlot.HasValue) return;
+        var target = await ctx.DayEvents.FirstOrDefaultAsync(e =>
+            e.DailyLogId == source.DailyLogId &&
+            e.MealSlot == targetSlot &&
+            e.EventType == DayEventType.Meal);
+        int sourceSlot = source.MealSlot.Value;
+        source.MealSlot = targetSlot;
+        if (target != null) target.MealSlot = sourceSlot;
+        await ctx.SaveChangesAsync();
+    }
+
     public async Task<FoodEntry> AddFoodEntryAsync(int dayEventId, string foodName, string? quantity, string? preparationMethod, string? groupName = null)
     {
         await using var ctx = await factory.CreateDbContextAsync();
