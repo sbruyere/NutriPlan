@@ -1,0 +1,701 @@
+@inject DiaryService DiaryService
+
+<div class="bg-white rounded-xl border border-slate-100 shadow-sm">
+
+    <!-- ── Ligne 1 : icône / label / heure / supprimer ────────────────── -->
+    <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-50 rounded-t-xl">
+        <span class="text-base flex-shrink-0">@(Event.EventType == DayEventType.Activity ? "🏃" : "🍽️")</span>
+        <input type="text" @bind="labelEdit" @onblur="SaveLabel"
+               placeholder="@(Event.EventType == DayEventType.Activity ? "ex: Trail, Yoga…" : "ex: Déjeuner, Collation…")"
+               class="flex-1 min-w-0 font-medium text-gray-700 bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-gray-300 text-sm" />
+        <input type="time" value="@timeEdit" @onchange="SaveTime"
+               class="text-[11px] text-gray-400 bg-slate-50 border-0 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-300 w-20 flex-shrink-0" />
+        <button @onclick="Delete" title="Supprimer"
+                class="text-gray-200 hover:text-red-400 transition-colors text-lg leading-none flex-shrink-0 w-5 text-center">×</button>
+    </div>
+
+    <!-- ── Ligne 2 : pills Faim / Rassasiement / Sensations / Émotions ── -->
+    @if (Event.EventType == DayEventType.Meal)
+    {
+        <div class="flex flex-wrap gap-1.5 px-3 py-1.5 bg-slate-50/60 border-b border-slate-50">
+
+            <!-- Faim avant -->
+            <div class="group relative">
+                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(hungerBefore.HasValue ? ScorePillClass(hungerBefore.Value) : "border-gray-100 text-gray-300 bg-white")">
+                    Faim
+                    <span class="@(hungerBefore.HasValue ? "font-bold" : "")">@(hungerBefore.HasValue ? $"{hungerBefore}/10" : "—")</span>
+                </button>
+                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
+                    <div class="flex gap-0.5 flex-wrap bg-white border border-gray-100 rounded-xl shadow-lg p-1.5" style="width:192px">
+                        @for (int i = 0; i <= 10; i++) { var s = i;
+                            <button @onclick="() => SetHunger(s)" class="w-7 h-7 rounded text-xs font-semibold transition-colors @ScoreClass(s, hungerBefore)">@s</button>
+                        }
+                        @if (hungerBefore.HasValue)
+                        {
+                            <button @onclick="() => SetHunger(null)" class="w-7 h-7 rounded text-xs text-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center">✕</button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rassasiement -->
+            <div class="group relative">
+                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(satietyAfter.HasValue ? ScorePillClass(satietyAfter.Value) : "border-gray-100 text-gray-300 bg-white")">
+                    Rass.
+                    <span class="@(satietyAfter.HasValue ? "font-bold" : "")">@(satietyAfter.HasValue ? $"{satietyAfter}/10" : "—")</span>
+                </button>
+                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
+                    <div class="flex gap-0.5 flex-wrap bg-white border border-gray-100 rounded-xl shadow-lg p-1.5" style="width:192px">
+                        @for (int i = 0; i <= 10; i++) { var s = i;
+                            <button @onclick="() => SetSatiety(s)" class="w-7 h-7 rounded text-xs font-semibold transition-colors @ScoreClass(s, satietyAfter)">@s</button>
+                        }
+                        @if (satietyAfter.HasValue)
+                        {
+                            <button @onclick="() => SetSatiety(null)" class="w-7 h-7 rounded text-xs text-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center">✕</button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensations -->
+            <div class="group relative">
+                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(string.IsNullOrEmpty(sensations) ? "border-gray-100 text-gray-300 bg-white" : "border-amber-200 text-amber-700 bg-amber-50")">
+                    Sensations
+                    <span class="@(string.IsNullOrEmpty(sensations) ? "" : "font-semibold")">@SensationSummary</span>
+                </button>
+                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
+                    <div class="bg-white border border-gray-100 rounded-xl shadow-lg p-2" style="min-width:270px">
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var chip in PhysicalSensationChips)
+                            {
+                                var c = chip;
+                                <button @onclick="() => ToggleSensationChip(c)"
+                                        class="px-2 py-1 rounded-lg text-xs border transition-colors @(SensationSelected(c) ? "bg-amber-100 border-amber-300 text-amber-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600")">
+                                    @(SensationSelected(c) ? "✓ " : "")@c
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Émotions -->
+            <div class="group relative">
+                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(string.IsNullOrEmpty(emotions) ? "border-gray-100 text-gray-300 bg-white" : "border-purple-200 text-purple-700 bg-purple-50")">
+                    Émotions
+                    <span class="@(string.IsNullOrEmpty(emotions) ? "" : "font-semibold")">@EmotionSummary</span>
+                </button>
+                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
+                    <div class="bg-white border border-gray-100 rounded-xl shadow-lg p-2" style="min-width:270px">
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var chip in EmotionChips)
+                            {
+                                var c = chip;
+                                <button @onclick="() => ToggleEmotionChip(c)"
+                                        class="px-2 py-1 rounded-lg text-xs border transition-colors @(EmotionSelected(c) ? "bg-purple-100 border-purple-300 text-purple-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-purple-50 hover:text-purple-600")">
+                                    @(EmotionSelected(c) ? "✓ " : "")@c
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    }
+
+    <!-- ── Corps ──────────────────────────────────────────────────────── -->
+    <div class="px-3 py-2.5 space-y-3">
+
+        @if (Event.EventType == DayEventType.Activity)
+        {
+            <!-- Sport : dropdown multi-choix -->
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <p class="text-[11px] font-medium text-gray-400">🎽 Type de sport</p>
+                    <div class="relative">
+                        <button @onclick="() => showSportPanel = !showSportPanel"
+                                class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] border border-primary-100 text-primary-400 hover:bg-primary-50 hover:text-primary-600 transition-colors">
+                            Choisir <span class="text-[9px]">@(showSportPanel ? "▲" : "▼")</span>
+                        </button>
+                        @if (showSportPanel)
+                        {
+                            <div class="fixed inset-0 z-20" @onclick="() => showSportPanel = false"></div>
+                            <div class="absolute left-0 top-full mt-1 z-30 bg-white border border-slate-100 rounded-xl shadow-xl p-2" style="width:310px">
+                                <div class="flex flex-wrap gap-1 max-h-36 overflow-y-auto mb-2">
+                                    @foreach (var sport in SportPresets)
+                                    {
+                                        var sp = sport;
+                                        <button @onclick="async () => { await SelectSport(sp); showSportPanel = false; }"
+                                                class="px-2 py-1 rounded-lg text-[11px] border whitespace-nowrap transition-colors @(labelEdit == sp ? "bg-primary-100 border-primary-300 text-primary-700 font-medium" : "bg-white border-slate-100 text-gray-500 hover:bg-primary-50 hover:text-primary-600 hover:border-primary-200")">
+                                            @(labelEdit == sp ? "✓ " : "")@sp
+                                        </button>
+                                    }
+                                </div>
+                                <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
+                                    <input @bind="customSportName" type="text" placeholder="Autre sport…"
+                                           class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-300 border-0" />
+                                    <button @onclick="async () => { await SelectCustomSport(); showSportPanel = false; }" disabled="@string.IsNullOrWhiteSpace(customSportName)"
+                                            class="px-2 py-1 rounded-lg text-[11px] bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-40 whitespace-nowrap">Choisir</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Durée + Intensité -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <label class="text-[11px] font-medium text-gray-400">Durée</label>
+                    <input type="number" min="0" step="5" @bind="durationMinutes" @onblur="SaveActivityFields" placeholder="—"
+                           class="w-16 bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    <span class="text-[11px] text-gray-400">min</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <label class="text-[11px] font-medium text-gray-400">Intensité</label>
+                    <div class="flex gap-1">
+                        @foreach (var opt in new[] { "Légère", "Modérée", "Intense" })
+                        {
+                            var o = opt;
+                            <button @onclick="() => SetIntensity(o)"
+                                    class="px-2 py-1 rounded-lg text-[11px] font-medium border transition-colors @(intensity == o ? IntensityActive(o) : "border-slate-100 text-gray-400 hover:bg-slate-50")">@o</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Hydratation — dropdown multi-choix -->
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <p class="text-[11px] font-medium text-gray-400">💧 Hydratation</p>
+                <div class="relative">
+                    <button @onclick="() => showDrinkPanel = !showDrinkPanel"
+                            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] border border-blue-100 text-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors">
+                        + Ajouter <span class="text-[9px]">@(showDrinkPanel ? "▲" : "▼")</span>
+                    </button>
+                    @if (showDrinkPanel)
+                    {
+                        <div class="fixed inset-0 z-20" @onclick="() => showDrinkPanel = false"></div>
+                        <div class="absolute left-0 top-full mt-1 z-30 bg-white border border-slate-100 rounded-xl shadow-xl p-2" style="min-width:230px">
+                            <div class="flex flex-wrap gap-1 mb-2">
+                                @foreach (var preset in QuickDrinks)
+                                {
+                                    var p = preset;
+                                    <button @onclick="() => AddDrink(p)"
+                                            class="px-2 py-1 rounded-lg text-[11px] border border-blue-100 text-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-colors whitespace-nowrap">@p</button>
+                                }
+                            </div>
+                            <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
+                                <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
+                                       class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 border-0" />
+                                <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
+                                        class="px-2 py-1 rounded-lg text-[11px] bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+            @if (drinks.Count > 0)
+            {
+                <div class="flex flex-wrap gap-1">
+                    @foreach (var (dname, dcount, dentries) in DrinkGroups)
+                    {
+                        var lastId = dentries[^1].Id;
+                        var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
+                        <span class="inline-flex items-center gap-1 bg-blue-50 text-blue-600 text-[11px] px-2 py-0.5 rounded-full">
+                            @dlabel
+                            <button @onclick="() => DeleteDrink(lastId)" class="hover:text-red-400 ml-0.5 leading-none">×</button>
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Aliments + Photos -->
+        <div>
+            <p class="text-[11px] font-medium text-gray-400 mb-1.5">Aliments</p>
+
+            <!-- Items sans groupe -->
+            @if (UngroupedFoods.Any())
+            {
+                <div class="divide-y divide-slate-50 mb-1.5">
+                    @foreach (var food in UngroupedFoods)
+                    {
+                        var f = food;
+                        <div class="flex items-center gap-2 py-1">
+                            <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
+                            @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@f.Quantity</span> }
+                            @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
+                            <button @onclick="() => DeleteFood(f.Id)" class="text-gray-200 hover:text-red-400 transition-colors text-base leading-none flex-shrink-0">×</button>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Plats composés (groupes) -->
+            @foreach (var grp in GroupedFoods)
+            {
+                var gName = grp.Key;
+                <div class="border border-slate-100 rounded-lg overflow-hidden mb-1.5">
+                    <div class="flex items-center gap-2 px-2.5 py-1 bg-slate-50 border-b border-slate-100">
+                        <span class="text-[11px] font-semibold text-gray-500 flex-1">🍽 @gName</span>
+                        <button @onclick="() => DeleteGroup(gName)"
+                                class="text-gray-300 hover:text-red-400 text-[10px] transition-colors">× Supprimer</button>
+                    </div>
+                    <div class="divide-y divide-slate-50 px-2">
+                        @foreach (var food in grp.OrderBy(f => f.CreatedAt))
+                        {
+                            var f = food;
+                            <div class="flex items-center gap-2 py-1 pl-1">
+                                <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
+                                @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@f.Quantity</span> }
+                                @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
+                                <button @onclick="() => DeleteFood(f.Id)" class="text-gray-200 hover:text-red-400 transition-colors text-base leading-none flex-shrink-0">×</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Ajout aliment — 2 lignes compactes -->
+            <div class="mt-1">
+                <!-- Ligne principale : nom + bouton -->
+                <div class="flex gap-1.5 items-center">
+                    <input @bind="newFoodName" type="text" placeholder="Ajouter un aliment…"
+                           @onkeyup="OnFoodKeyUp"
+                           class="flex-1 min-w-0 bg-slate-50 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 placeholder-gray-300" />
+                    <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)"
+                            class="bg-primary-600 hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">+</button>
+                </div>
+                <!-- Ligne secondaire : détails optionnels -->
+                <div class="flex gap-1 items-center mt-1 flex-wrap">
+                    <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
+                           class="w-12 bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-300" />
+                    <select @bind="newFoodQtyUnit"
+                            class="bg-slate-50 rounded-md px-1 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[72px]">
+                        <option value="">u.</option>
+                        <option value="g">g</option>
+                        <option value="kg">kg</option>
+                        <option value="ml">ml</option>
+                        <option value="cl">cl</option>
+                        <option value="L">L</option>
+                        <option value="pièce(s)">pc</option>
+                        <option value="tranche(s)">tr.</option>
+                        <option value="portion">port.</option>
+                        <option value="bol">bol</option>
+                        <option value="verre">verre</option>
+                        <option value="tasse">tasse</option>
+                        <option value="c. à café">c.c.</option>
+                        <option value="c. à soupe">c.s.</option>
+                        <option value="pincée">pincée</option>
+                    </select>
+                    <span class="text-slate-200 text-xs select-none">│</span>
+                    <input @bind="newFoodPrep" type="text" placeholder="Préparation…"
+                           class="flex-1 min-w-[80px] bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-300" />
+                    <span class="text-slate-200 text-xs select-none">│</span>
+                    <select @bind="newFoodGroup"
+                            class="bg-slate-50 rounded-md px-1 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[90px]">
+                        <option value="">Groupe…</option>
+                        @foreach (var g in ExistingGroups)
+                        {
+                            var gn = g;
+                            <option value="@gn">🍽 @gn</option>
+                        }
+                        <option value="__new__">+ Nouveau…</option>
+                    </select>
+                    @if (newFoodGroup == "__new__")
+                    {
+                        <input @bind="newFoodGroupName" type="text" placeholder="Nom du plat…"
+                               class="w-28 bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-300" />
+                    }
+                </div>
+            </div>
+
+            <!-- Photos (dans la section Aliments) -->
+            @if (Event.EventType == DayEventType.Meal)
+            {
+                <div class="mt-2 pt-2 border-t border-slate-50">
+                    @if (photos.Count > 0)
+                    {
+                        <div class="flex flex-wrap gap-1.5 mb-1.5">
+                            @foreach (var photo in photos)
+                            {
+                                var ph = photo;
+                                <div class="relative">
+                                    <img src="@ph.FilePath" alt="Photo repas"
+                                         class="w-16 h-16 object-cover rounded-lg border border-slate-100 cursor-pointer hover:opacity-90 transition-opacity"
+                                         @onclick="() => lightboxUrl = ph.FilePath" />
+                                    <button @onclick="() => DeletePhoto(ph.Id)"
+                                            class="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center">×</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                    @if (lightboxUrl != null)
+                    {
+                        <div class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center cursor-zoom-out"
+                             @onclick="() => lightboxUrl = null">
+                            <img src="@lightboxUrl" class="max-w-[92vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" />
+                            <button class="absolute top-4 right-5 text-white text-3xl leading-none opacity-70 hover:opacity-100 transition-opacity"
+                                    @onclick="() => lightboxUrl = null">✕</button>
+                        </div>
+                    }
+                    @if (uploadError != null)
+                    {
+                        <p class="text-red-400 text-[11px] mb-1">@uploadError</p>
+                    }
+                    <label class="inline-flex items-center gap-1 cursor-pointer px-2.5 py-1 border border-dashed border-slate-200 hover:border-primary-300 rounded-lg text-[11px] text-gray-400 hover:text-primary-500 transition-colors">
+                        📷 Photo
+                        <InputFile OnChange="UploadPhoto" accept="image/*" class="hidden" />
+                    </label>
+                </div>
+            }
+        </div>
+
+        @if (Event.EventType == DayEventType.Meal)
+        {
+            <!-- Activités pendant ce repas -->
+            @if (Event.MealSlot.HasValue)
+            {
+                <div>
+                    <p class="text-[11px] font-medium text-gray-400 mb-1.5">Activités pendant ce repas</p>
+                    @if (ConcurrentActivities.Count > 0)
+                    {
+                        <div class="space-y-1.5 mb-1.5">
+                            @foreach (var act in ConcurrentActivities)
+                            {
+                                var a = act;
+                                <EventCard Event="a" ConcurrentActivities="@EmptyActivities"
+                                           OnChanged="OnChanged" OnDelete="DeleteConcurrent" />
+                            }
+                        </div>
+                    }
+                    <button @onclick="AddConcurrentActivity"
+                            class="w-full border border-dashed border-emerald-200 hover:border-emerald-400 text-emerald-400 hover:text-emerald-600 rounded-lg py-1 text-[11px] font-medium transition-colors">
+                        + Activité simultanée
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <!-- Notes (activité) -->
+            <div>
+                <p class="text-[11px] font-medium text-gray-400 mb-1">Notes</p>
+                <textarea @bind="activityNotes" @onblur="SaveActivityFields" rows="2" placeholder="Parcours, ressenti, météo…"
+                          class="w-full bg-slate-50 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none placeholder-gray-300 border-0"></textarea>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DayEvent Event { get; set; } = null!;
+    [Parameter] public IReadOnlyList<DayEvent> ConcurrentActivities { get; set; } = [];
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<int> OnDelete { get; set; }
+
+    static readonly IReadOnlyList<DayEvent> EmptyActivities = [];
+
+    static readonly string[] SportPresets =
+    [
+        "Course à pied", "Trail", "Jogging", "Marche", "Randonnée", "Marche nordique",
+        "Vélo route", "VTT", "Gravel", "Cycling indoor", "BMX",
+        "Natation", "Aquajogging", "Nage en eau libre",
+        "Football", "Basketball", "Volleyball", "Rugby", "Handball", "Hockey",
+        "Tennis", "Badminton", "Squash", "Padel", "Ping-pong",
+        "Musculation", "CrossFit", "HIIT", "Cardio machine",
+        "Judo", "Karaté", "Boxe", "MMA", "Taekwondo", "Krav Maga",
+        "Yoga", "Pilates", "Stretching",
+        "Ski alpin", "Ski de fond", "Snowboard", "Patinage",
+        "Escalade", "Escalade indoor",
+        "Surf", "Kayak", "Aviron", "Plongée",
+        "Golf", "Équitation", "Danse", "Gym artistique",
+    ];
+
+    static readonly string[] QuickDrinks =
+    [
+        "Eau (1 verre)", "Eau (75cl)", "Eau (1,5L)", "Café expresso",
+        "Café allongé", "Thé (grande tasse)", "Eau gazeuse",
+        "Boisson isotonique", "Électrolytes", "Sirop", "Jus de fruit",
+    ];
+
+    static readonly string[] PhysicalSensationChips =
+    [
+        "Aucune gêne", "Ballonnement", "Lourdeur", "Brûlures d'estomac",
+        "Nausée", "Fatigue", "Énergie", "Légèreté", "Crampes",
+    ];
+
+    static readonly string[] EmotionChips =
+    [
+        "Bien", "Serein(e)", "Neutre", "Heureux/se",
+        "Anxieux/se", "Stressé(e)", "Triste", "Coupable", "Frustré(e)",
+    ];
+
+    // État local commun
+    string labelEdit = "";
+    string timeEdit = "";
+    List<FoodEntry> foods = [];
+    string newFoodName = "", newFoodQtyVal = "", newFoodQtyUnit = "g", newFoodPrep = "";
+    string newFoodGroup = "", newFoodGroupName = "";
+    List<DrinkEntry> drinks = [];
+    string customDrinkName = "";
+    bool showDrinkPanel;
+
+    // État local repas
+    int? hungerBefore;
+    int? satietyAfter;
+    string? sensations;
+    string? emotions;
+    List<MealPhoto> photos = [];
+    string? uploadError;
+    string? lightboxUrl;
+
+    // État local activité
+    int? durationMinutes;
+    string? intensity;
+    string? activityNotes;
+    string customSportName = "";
+    bool showSportPanel;
+
+    // Propriétés calculées
+    IEnumerable<FoodEntry> UngroupedFoods =>
+        foods.Where(f => string.IsNullOrEmpty(f.GroupName));
+    IEnumerable<IGrouping<string, FoodEntry>> GroupedFoods =>
+        foods.Where(f => !string.IsNullOrEmpty(f.GroupName))
+             .GroupBy(f => f.GroupName!).OrderBy(g => g.Key);
+    IEnumerable<string> ExistingGroups =>
+        foods.Where(f => !string.IsNullOrEmpty(f.GroupName))
+             .Select(f => f.GroupName!).Distinct().OrderBy(g => g);
+    IEnumerable<(string Name, int Count, List<DrinkEntry> Entries)> DrinkGroups =>
+        drinks.GroupBy(d => d.DrinkName)
+              .Select(g => (g.Key, g.Count(), g.OrderBy(d => d.CreatedAt).ToList()));
+
+    string SensationSummary => ChipSummary(sensations);
+    string EmotionSummary   => ChipSummary(emotions);
+
+    static string ChipSummary(string? val)
+    {
+        var items = (val ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return items.Length switch
+        {
+            0 => "—",
+            1 => items[0],
+            _ => $"{items[0]} +{items.Length - 1}"
+        };
+    }
+
+    protected override void OnParametersSet()
+    {
+        labelEdit = Event.Label;
+        timeEdit = Event.Time?.ToString("HH:mm") ?? "";
+        hungerBefore = Event.HungerBefore;
+        satietyAfter = Event.SatietyAfter;
+        sensations = Event.Sensations;
+        emotions = Event.Emotions;
+        durationMinutes = Event.DurationMinutes;
+        intensity = Event.Intensity;
+        activityNotes = Event.ActivityNotes;
+        foods = Event.FoodEntries.OrderBy(f => f.CreatedAt).ToList();
+        drinks = Event.DrinkEntries.OrderBy(d => d.CreatedAt).ToList();
+        photos = Event.Photos.OrderBy(p => p.CreatedAt).ToList();
+    }
+
+    // ── Sauvegardes ──────────────────────────────────────────────────────────
+
+    async Task SaveLabel()
+    {
+        if (string.IsNullOrWhiteSpace(labelEdit)) labelEdit = Event.Label;
+        await Save();
+    }
+
+    async Task SaveTime(ChangeEventArgs e)
+    {
+        timeEdit = e.Value?.ToString() ?? "";
+        await Save();
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task SetHunger(int? score) { hungerBefore = score; await Save(); }
+    async Task SetSatiety(int? score) { satietyAfter = score; await Save(); }
+    async Task SetIntensity(string opt) { intensity = intensity == opt ? null : opt; await Save(); }
+    async Task SaveActivityFields() => await Save();
+    async Task SelectSport(string sport) { labelEdit = sport; await Save(); }
+    async Task SelectCustomSport() { if (!string.IsNullOrWhiteSpace(customSportName)) { labelEdit = customSportName.Trim(); customSportName = ""; await Save(); } }
+
+    async Task Save()
+    {
+        await DiaryService.UpdateEventAsync(Event.Id, labelEdit, ParseTime(timeEdit),
+            hungerBefore, satietyAfter, sensations, emotions,
+            durationMinutes, intensity, activityNotes);
+        Event.Label = labelEdit;
+        Event.Time = ParseTime(timeEdit);
+        Event.HungerBefore = hungerBefore;
+        Event.SatietyAfter = satietyAfter;
+        Event.Sensations = sensations;
+        Event.Emotions = emotions;
+        Event.DurationMinutes = durationMinutes;
+        Event.Intensity = intensity;
+        Event.ActivityNotes = activityNotes;
+    }
+
+    // ── Aliments ─────────────────────────────────────────────────────────────
+
+    async Task AddFood()
+    {
+        if (string.IsNullOrWhiteSpace(newFoodName)) return;
+        var qtyParts = new[] { newFoodQtyVal.Trim(), newFoodQtyUnit.Trim() }.Where(s => !string.IsNullOrEmpty(s));
+        var qty = string.Join(" ", qtyParts);
+        var groupName = newFoodGroup == "__new__" ? newFoodGroupName.Trim()
+            : string.IsNullOrEmpty(newFoodGroup) ? null
+            : newFoodGroup;
+        var entry = await DiaryService.AddFoodEntryAsync(Event.Id, newFoodName.Trim(), qty, newFoodPrep.Trim(), groupName);
+        foods.Add(entry);
+        newFoodName = newFoodQtyVal = newFoodPrep = "";
+        newFoodQtyUnit = "g";
+    }
+
+    async Task DeleteFood(int id)
+    {
+        await DiaryService.DeleteFoodEntryAsync(id);
+        foods.RemoveAll(f => f.Id == id);
+    }
+
+    async Task DeleteGroup(string groupName)
+    {
+        var toDelete = foods.Where(f => f.GroupName == groupName).ToList();
+        foreach (var food in toDelete)
+        {
+            await DiaryService.DeleteFoodEntryAsync(food.Id);
+            foods.Remove(food);
+        }
+        if (newFoodGroup == groupName) newFoodGroup = "";
+    }
+
+    void OnFoodKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") _ = AddFood(); }
+
+    // ── Hydratation ──────────────────────────────────────────────────────────
+
+    async Task AddDrink(string name)
+    {
+        var entry = await DiaryService.AddDrinkEntryAsync(Event.Id, name);
+        drinks.Add(entry);
+    }
+
+    async Task DeleteDrink(int id)
+    {
+        await DiaryService.DeleteDrinkEntryAsync(id);
+        drinks.RemoveAll(d => d.Id == id);
+    }
+
+    async Task AddCustomDrink()
+    {
+        if (string.IsNullOrWhiteSpace(customDrinkName)) return;
+        var entry = await DiaryService.AddDrinkEntryAsync(Event.Id, customDrinkName.Trim());
+        drinks.Add(entry);
+        customDrinkName = string.Empty;
+    }
+
+    void OnDrinkKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") _ = AddCustomDrink(); }
+
+    // ── Sensations / Émotions chips ──────────────────────────────────────────
+
+    async Task ToggleSensationChip(string chip)
+    {
+        var items = (sensations ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (items.Contains(chip)) items.Remove(chip); else items.Add(chip);
+        sensations = items.Count > 0 ? string.Join(", ", items) : null;
+        await Save();
+    }
+
+    async Task ToggleEmotionChip(string chip)
+    {
+        var items = (emotions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (items.Contains(chip)) items.Remove(chip); else items.Add(chip);
+        emotions = items.Count > 0 ? string.Join(", ", items) : null;
+        await Save();
+    }
+
+    bool SensationSelected(string chip) =>
+        (sensations ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(chip);
+
+    bool EmotionSelected(string chip) =>
+        (emotions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(chip);
+
+    // ── Photos ───────────────────────────────────────────────────────────────
+
+    async Task UploadPhoto(InputFileChangeEventArgs e)
+    {
+        uploadError = null;
+        var file = e.File;
+        if (file == null) return;
+        const long maxSize = 5L * 1024 * 1024;
+        if (file.Size > maxSize) { uploadError = "Photo trop volumineuse (max 5 Mo)."; return; }
+        try
+        {
+            await using var stream = file.OpenReadStream(maxSize);
+            var photo = await DiaryService.AddPhotoAsync(Event.Id, stream, file.Name);
+            photos.Add(photo);
+        }
+        catch (Exception ex)
+        {
+            uploadError = $"Erreur lors de l'envoi : {ex.Message}";
+        }
+    }
+
+    async Task DeletePhoto(int photoId)
+    {
+        await DiaryService.DeletePhotoAsync(photoId);
+        photos.RemoveAll(p => p.Id == photoId);
+    }
+
+    // ── Activités simultanées ────────────────────────────────────────────────
+
+    async Task AddConcurrentActivity()
+    {
+        await DiaryService.AddConcurrentActivityAsync(Event.DailyLogId, Event.MealSlot!.Value);
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task DeleteConcurrent(int actId)
+    {
+        await DiaryService.DeleteEventAsync(actId);
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task Delete() => await OnDelete.InvokeAsync(Event.Id);
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    static TimeOnly? ParseTime(string val) =>
+        string.IsNullOrEmpty(val) ? null : TimeOnly.TryParse(val, out var t) ? t : null;
+
+    static string ScorePillClass(int s) => s switch
+    {
+        0     => "bg-gray-50 border-gray-200 text-gray-500",
+        <= 3  => "bg-green-50 border-green-200 text-green-700",
+        <= 6  => "bg-amber-50 border-amber-200 text-amber-700",
+        _     => "bg-red-50 border-red-200 text-red-600"
+    };
+
+    static string ScoreClass(int score, int? selected) =>
+        selected == score
+            ? score == 0    ? "bg-gray-400 text-white"
+              : score <= 3  ? "bg-green-500 text-white"
+              : score <= 6  ? "bg-amber-400 text-white"
+              : "bg-red-500 text-white"
+            : score == 0    ? "bg-gray-50 text-gray-500 hover:bg-gray-100"
+              : score <= 3  ? "bg-green-50 text-green-600 hover:bg-green-100"
+              : score <= 6  ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
+              : "bg-red-50 text-red-500 hover:bg-red-100";
+
+    static string IntensityActive(string s) => s switch
+    {
+        "Légère"  => "bg-green-100 text-green-700 border-green-300",
+        "Modérée" => "bg-amber-100 text-amber-700 border-amber-300",
+        "Intense" => "bg-red-100 text-red-700 border-red-300",
+        _         => "bg-gray-100 text-gray-700 border-gray-300"
+    };
+}

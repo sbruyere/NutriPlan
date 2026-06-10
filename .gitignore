@@ -6,3 +6,6 @@ obj/
 .vs/
 *.user
 .idea/
+run.log
+run.err.log
+wwwroot/uploads/

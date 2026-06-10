@@ -23,5 +23,5 @@ public class DailyLog
     [MaxLength(500)]
     public string? GeneralNotes { get; set; }
 
-    public ICollection<MealLog> MealLogs { get; set; } = [];
+    public ICollection<DayEvent> Events { get; set; } = [];
 }

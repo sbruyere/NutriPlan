@@ -26,8 +26,8 @@
     <HeadOutlet />
 </head>
 
-<body class="bg-gray-50 text-gray-900 min-h-screen">
-    <Routes />
+<body class="bg-slate-50 text-gray-900 min-h-screen">
+    <Routes @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>

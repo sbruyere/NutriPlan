@@ -1,5 +1,4 @@
 @page "/nutritionniste/patient/{AccessCode}"
-@rendermode InteractiveServer
 @inject DiaryService DiaryService
 @inject DiarySessionService Session
 @inject NavigationManager Nav
@@ -9,201 +8,216 @@
 @if (!Session.IsNutritionistLoggedIn)
 {
     <div class="text-center text-gray-400 py-12">Redirection…</div>
-    return;
 }
-@if (diary == null)
+else if (diary == null)
 {
     <div class="text-center text-gray-400 py-12">Chargement…</div>
-    return;
 }
-
-<div class="space-y-5">
-    <!-- En-tête -->
-    <div class="flex items-center justify-between flex-wrap gap-3">
-        <div class="flex items-center gap-3">
-            <a href="/nutritionniste/tableau-de-bord" class="text-gray-400 hover:text-gray-600 transition-colors text-xl">←</a>
-            <div>
-                <h1 class="text-xl font-bold text-gray-800">@(diary.PatientAlias ?? "Patient anonyme")</h1>
-                <p class="text-xs font-mono text-gray-400">
-                    @diary.AccessCode · Depuis le @diary.CreatedAt.ToString("d MMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
-                </p>
-            </div>
-        </div>
-        <div class="flex gap-2">
-            <button @onclick="() => showHistory = !showHistory"
-                    class="text-sm text-primary-600 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
-                @(showHistory ? "Vue journée" : "Historique")
-            </button>
-            <button @onclick="() => showDeleteConfirm = true"
-                    class="text-sm text-red-500 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors">
-                Supprimer
-            </button>
-        </div>
-    </div>
-
-    @if (!string.IsNullOrEmpty(diary.Notes))
-    {
-        <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-700">
-            <strong>Notes :</strong> @diary.Notes
-        </div>
-    }
-
-    @if (!showHistory)
-    {
-        <!-- Sélecteur de date -->
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center justify-between">
-            <button @onclick="PreviousDay" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">←</button>
-            <div class="text-center">
-                <p class="font-semibold text-gray-800 capitalize">
-                    @selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
-                </p>
-                @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
-                {
-                    <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">Aujourd'hui</span>
-                }
-            </div>
-            <button @onclick="NextDay" disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
-                    class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 text-gray-500 transition-colors">→</button>
-        </div>
-
-        @if (currentLog == null || !currentLog.MealLogs.Any(m => m.FoodEntries.Count > 0 || m.HungerBefore.HasValue || m.SatietyAfter.HasValue))
-        {
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-                <p class="text-gray-300 text-sm">Aucune saisie pour ce jour.</p>
-            </div>
-        }
-        else
-        {
-            @foreach (var mealDef in MealDefinitions)
-            {
-                var meal = currentLog!.MealLogs.FirstOrDefault(m => m.MealType == mealDef.Type);
-                if (meal == null) continue;
-                var hasData = meal.FoodEntries.Count > 0 || meal.HungerBefore.HasValue || meal.SatietyAfter.HasValue || !string.IsNullOrEmpty(meal.BetweenMealSensations);
-                if (!hasData) continue;
-
-                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div class="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-                        <span class="text-lg">@mealDef.Icon</span>
-                        <span class="font-medium text-gray-700">@mealDef.Label</span>
-                        @if (meal.HungerBefore.HasValue)
-                        {
-                            <span class="text-xs px-2 py-0.5 rounded-full @ScoreBadge(meal.HungerBefore.Value)">
-                                Faim @meal.HungerBefore/10
-                            </span>
-                        }
-                        @if (meal.SatietyAfter.HasValue)
-                        {
-                            <span class="text-xs px-2 py-0.5 rounded-full @ScoreBadge(meal.SatietyAfter.Value)">
-                                Rassasiement @meal.SatietyAfter/10
-                            </span>
-                        }
-                    </div>
-
-                    @if (meal.FoodEntries.Count > 0)
-                    {
-                        <ul class="divide-y divide-gray-50">
-                            @foreach (var entry in meal.FoodEntries)
-                            {
-                                <li class="px-4 py-2.5">
-                                    <p class="text-sm font-medium text-gray-800">@entry.FoodName</p>
-                                    <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                                        @if (!string.IsNullOrEmpty(entry.Quantity))
-                                        {
-                                            <span class="text-xs text-gray-500">📏 @entry.Quantity</span>
-                                        }
-                                        @if (!string.IsNullOrEmpty(entry.PreparationMethod))
-                                        {
-                                            <span class="text-xs text-gray-400 italic">🍳 @entry.PreparationMethod</span>
-                                        }
-                                        @if (!string.IsNullOrEmpty(entry.Notes))
-                                        {
-                                            <span class="text-xs text-gray-400">@entry.Notes</span>
-                                        }
-                                    </div>
-                                </li>
-                            }
-                        </ul>
-                    }
-
-                    @if (!string.IsNullOrEmpty(meal.BetweenMealSensations))
-                    {
-                        <div class="px-4 py-2.5 bg-orange-50 border-t border-orange-100">
-                            <p class="text-xs text-orange-600">
-                                <span class="font-medium">Sensations entre repas :</span> @meal.BetweenMealSensations
-                            </p>
-                        </div>
-                    }
-                </div>
-            }
-
-            <!-- Bilan journée -->
-            @if (!string.IsNullOrEmpty(currentLog!.Hydration) || !string.IsNullOrEmpty(currentLog.Emotions) || !string.IsNullOrEmpty(currentLog.PhysicalActivity) || !string.IsNullOrEmpty(currentLog.GeneralNotes))
-            {
-                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                    <h3 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                        <span>📊</span> Bilan de la journée
-                    </h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                        @if (!string.IsNullOrEmpty(currentLog.Hydration))
-                        {
-                            <div class="bg-blue-50 rounded-xl p-3">
-                                <p class="text-xs font-medium text-blue-400 mb-1">💧 Hydratation</p>
-                                <p class="text-blue-700">@currentLog.Hydration</p>
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(currentLog.Emotions))
-                        {
-                            <div class="bg-purple-50 rounded-xl p-3">
-                                <p class="text-xs font-medium text-purple-400 mb-1">🧘 Émotions / Stress</p>
-                                <p class="text-purple-700">@currentLog.Emotions</p>
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(currentLog.PhysicalActivity))
-                        {
-                            <div class="bg-green-50 rounded-xl p-3">
-                                <p class="text-xs font-medium text-green-500 mb-1">🏃 Activité physique</p>
-                                <p class="text-green-700">@currentLog.PhysicalActivity</p>
-                            </div>
-                        }
-                    </div>
-                    @if (!string.IsNullOrEmpty(currentLog.GeneralNotes))
-                    {
-                        <div class="mt-3 bg-gray-50 rounded-xl p-3">
-                            <p class="text-xs font-medium text-gray-400 mb-1">📝 Notes</p>
-                            <p class="text-sm text-gray-600">@currentLog.GeneralNotes</p>
-                        </div>
-                    }
-                </div>
-            }
-        }
-    }
-    else
-    {
-        <NutritionistHistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
-    }
-</div>
-
-@if (showDeleteConfirm)
+else
 {
-    <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
-            <div class="text-4xl mb-3">⚠️</div>
-            <h3 class="font-semibold text-gray-800 mb-2">Supprimer ce carnet ?</h3>
-            <p class="text-sm text-gray-400 mb-6">
-                Toutes les entrées de <strong>@diary.PatientAlias</strong> seront supprimées définitivement.
-            </p>
-            <div class="flex gap-3">
-                <button @onclick="() => showDeleteConfirm = false"
-                        class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition-colors">
-                    Annuler
+    <div class="space-y-5">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+            <div class="flex items-center gap-3">
+                <a href="/nutritionniste/tableau-de-bord" class="text-gray-400 hover:text-gray-600 transition-colors text-xl">←</a>
+                <div>
+                    <h1 class="text-xl font-bold text-gray-800">@(diary.PatientAlias ?? "Patient anonyme")</h1>
+                    <p class="text-xs font-mono text-gray-400">
+                        @diary.AccessCode · Depuis le @diary.CreatedAt.ToString("d MMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                    </p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button @onclick="() => showHistory = !showHistory"
+                        class="text-sm text-primary-600 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
+                    @(showHistory ? "Vue journée" : "Historique")
                 </button>
-                <button @onclick="ConfirmDelete"
-                        class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                <button @onclick="() => showDeleteConfirm = true"
+                        class="text-sm text-red-500 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors">
                     Supprimer
                 </button>
             </div>
         </div>
+
+        @if (!string.IsNullOrEmpty(diary.Notes))
+        {
+            <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-700">
+                <strong>Notes :</strong> @diary.Notes
+            </div>
+        }
+
+        @if (!showHistory)
+        {
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center justify-between">
+                <button @onclick="PreviousDay" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">←</button>
+                <div class="text-center">
+                    <p class="font-semibold text-gray-800 capitalize">
+                        @selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                    </p>
+                    @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
+                    {
+                        <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">Aujourd'hui</span>
+                    }
+                </div>
+                <button @onclick="NextDay" disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
+                        class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 text-gray-500 transition-colors">→</button>
+            </div>
+
+            @if (currentLog == null || !currentLog.Events.Any())
+            {
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                    <p class="text-gray-300 text-sm">Aucune saisie pour ce jour.</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var group in currentLog.Events
+                    .GroupBy(e => e.Time)
+                    .OrderBy(g => g.Key == null ? 1 : 0)
+                    .ThenBy(g => g.Key))
+                {
+                    <div class="flex gap-3 items-start">
+                        <div class="w-14 text-right text-xs text-gray-400 pt-4 flex-shrink-0 font-mono">
+                            @(group.Key?.ToString("HH:mm") ?? "—")
+                        </div>
+                        <div class="flex-1 @(group.Count() > 1 ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "")">
+                            @foreach (var evt in group.OrderBy(e => e.EventType).ThenBy(e => e.CreatedAt))
+                            {
+                                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                    <div class="px-4 py-3 border-b border-gray-50 flex items-center gap-2 flex-wrap">
+                                        <span class="text-lg">@(evt.EventType == DayEventType.Activity ? "🏃" : "🍽️")</span>
+                                        <span class="font-medium text-gray-700">@evt.Label</span>
+                                        @if (evt.HungerBefore.HasValue)
+                                        {
+                                            <span class="text-xs px-2 py-0.5 rounded-full @ScoreBadge(evt.HungerBefore.Value)">
+                                                Faim @evt.HungerBefore/10
+                                            </span>
+                                        }
+                                        @if (evt.SatietyAfter.HasValue)
+                                        {
+                                            <span class="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                                                Rassasiement @evt.SatietyAfter/10
+                                            </span>
+                                        }
+                                    </div>
+
+                                    @if (evt.EventType == DayEventType.Meal)
+                                    {
+                                        @if (evt.FoodEntries.Count > 0)
+                                        {
+                                            <ul class="divide-y divide-gray-50">
+                                                @foreach (var entry in evt.FoodEntries)
+                                                {
+                                                    <li class="px-4 py-2.5">
+                                                        <p class="text-sm font-medium text-gray-800">@entry.FoodName</p>
+                                                        <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                                            @if (!string.IsNullOrEmpty(entry.Quantity))
+                                                            {
+                                                                <span class="text-xs text-gray-500">📏 @entry.Quantity</span>
+                                                            }
+                                                            @if (!string.IsNullOrEmpty(entry.PreparationMethod))
+                                                            {
+                                                                <span class="text-xs text-gray-400 italic">🍳 @entry.PreparationMethod</span>
+                                                            }
+                                                        </div>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
+                                        @if (!string.IsNullOrEmpty(evt.Sensations))
+                                        {
+                                            <div class="px-4 py-2.5 bg-orange-50 border-t border-orange-100">
+                                                <p class="text-xs text-orange-600">
+                                                    <span class="font-medium">Sensations :</span> @evt.Sensations
+                                                </p>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div class="px-4 py-3 space-y-1">
+                                            <div class="flex items-center gap-3 flex-wrap">
+                                                @if (evt.DurationMinutes.HasValue)
+                                                {
+                                                    <span class="text-xs text-gray-500">⏱ @evt.DurationMinutes min</span>
+                                                }
+                                                @if (!string.IsNullOrEmpty(evt.Intensity))
+                                                {
+                                                    <span class="text-xs @IntensityBadge(evt.Intensity) px-2 py-0.5 rounded-full">@evt.Intensity</span>
+                                                }
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(evt.ActivityNotes))
+                                            {
+                                                <p class="text-sm text-gray-600">@evt.ActivityNotes</p>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(currentLog.Hydration) || !string.IsNullOrEmpty(currentLog.Emotions) || !string.IsNullOrEmpty(currentLog.GeneralNotes))
+                {
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                        <h3 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                            <span>📊</span> Bilan de la journée
+                        </h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            @if (!string.IsNullOrEmpty(currentLog.Hydration))
+                            {
+                                <div class="bg-blue-50 rounded-xl p-3">
+                                    <p class="text-xs font-medium text-blue-400 mb-1">💧 Hydratation</p>
+                                    <p class="text-blue-700">@currentLog.Hydration</p>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(currentLog.Emotions))
+                            {
+                                <div class="bg-purple-50 rounded-xl p-3">
+                                    <p class="text-xs font-medium text-purple-400 mb-1">🧘 Émotions / Stress</p>
+                                    <p class="text-purple-700">@currentLog.Emotions</p>
+                                </div>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(currentLog.GeneralNotes))
+                        {
+                            <div class="mt-3 bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs font-medium text-gray-400 mb-1">📝 Notes</p>
+                                <p class="text-sm text-gray-600">@currentLog.GeneralNotes</p>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        }
+        else
+        {
+            <NutritionistHistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
+        }
     </div>
+
+    @if (showDeleteConfirm)
+    {
+        <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+                <div class="text-4xl mb-3">⚠️</div>
+                <h3 class="font-semibold text-gray-800 mb-2">Supprimer ce carnet ?</h3>
+                <p class="text-sm text-gray-400 mb-6">
+                    Toutes les entrées de <strong>@diary.PatientAlias</strong> seront supprimées définitivement.
+                </p>
+                <div class="flex gap-3">
+                    <button @onclick="() => showDeleteConfirm = false"
+                            class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition-colors">
+                        Annuler
+                    </button>
+                    <button @onclick="ConfirmDelete"
+                            class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                        Supprimer
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -213,16 +227,6 @@
     DailyLog? currentLog;
     DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Today);
     bool showHistory, showDeleteConfirm;
-
-    static readonly (MealType Type, string Label, string Icon)[] MealDefinitions =
-    [
-        (MealType.PetitDejeuner,      "Petit-déjeuner",       "☕"),
-        (MealType.CollationMatin,     "Collation matin",      "🍎"),
-        (MealType.Dejeuner,           "Déjeuner",             "🍽️"),
-        (MealType.CollationApresMidi, "Collation après-midi", "🫐"),
-        (MealType.Diner,              "Dîner",                "🌙"),
-        (MealType.CollationSoir,      "Collation soir",       "🌛"),
-    ];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -243,8 +247,6 @@
 
     void SelectDate(DateOnly date) { selectedDate = date; showHistory = false; _ = LoadDay(); }
 
-    void DeleteDiary() => showDeleteConfirm = true;
-
     async Task ConfirmDelete()
     {
         await DiaryService.DeleteDiaryAsync(diary!.Id);
@@ -256,5 +258,13 @@
         <= 3 => "bg-green-100 text-green-600",
         <= 6 => "bg-amber-100 text-amber-600",
         _ => "bg-red-100 text-red-600"
+    };
+
+    static string IntensityBadge(string s) => s switch
+    {
+        "Légère"  => "bg-green-100 text-green-700",
+        "Modérée" => "bg-amber-100 text-amber-700",
+        "Intense" => "bg-red-100 text-red-700",
+        _         => "bg-gray-100 text-gray-700"
     };
 }

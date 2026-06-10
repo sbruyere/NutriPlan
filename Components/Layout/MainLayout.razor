@@ -4,41 +4,41 @@
 @implements IDisposable
 
 <div class="min-h-screen flex flex-col">
-    <header class="bg-primary-600 text-white shadow-md">
-        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-            <a href="/" class="flex items-center gap-2 text-xl font-bold tracking-tight hover:text-primary-100 transition-colors">
-                <span class="text-2xl">🥦</span>
-                <span>NutriPlan</span>
+    <header class="bg-primary-600 text-white shadow-sm sticky top-0 z-40" style="backdrop-filter:blur(8px)">
+        <div class="max-w-4xl mx-auto px-4 py-2 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-1.5 font-bold tracking-tight hover:text-primary-100 transition-colors">
+                <span class="text-lg">🥦</span>
+                <span class="text-base">NutriPlan</span>
             </a>
-            <nav class="flex items-center gap-3 text-sm">
+            <nav class="flex items-center gap-2 text-sm">
                 @if (Session.IsNutritionistLoggedIn)
                 {
-                    <span class="hidden sm:inline text-primary-100">@Session.NutritionistName</span>
+                    <span class="hidden sm:inline text-primary-200 text-xs">@Session.NutritionistName</span>
                     <a href="/nutritionniste/tableau-de-bord"
-                       class="bg-primary-700 hover:bg-primary-800 px-3 py-1.5 rounded-lg transition-colors">
+                       class="bg-primary-700 hover:bg-primary-800 px-2.5 py-1 rounded-lg transition-colors text-xs">
                         Tableau de bord
                     </a>
                     <button @onclick="Logout"
-                            class="bg-white text-primary-700 hover:bg-primary-50 px-3 py-1.5 rounded-lg transition-colors font-medium">
+                            class="bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium border border-white/20">
                         Déconnexion
                     </button>
                 }
                 else
                 {
                     <a href="/nutritionniste/connexion"
-                       class="bg-white text-primary-700 hover:bg-primary-50 px-3 py-1.5 rounded-lg transition-colors font-medium">
-                        Espace nutritionniste
+                       class="bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium border border-white/20">
+                        Espace pro
                     </a>
                 }
             </nav>
         </div>
     </header>
 
-    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-4">
         @Body
     </main>
 
-    <footer class="border-t border-gray-200 bg-white text-center text-xs text-gray-400 py-3">
+    <footer class="border-t border-slate-200 bg-white/60 text-center text-[11px] text-gray-400 py-2">
         NutriPlan &mdash; Cahier de suivi alimentaire
     </footer>
 </div>

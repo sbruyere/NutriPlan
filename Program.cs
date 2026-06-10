@@ -19,7 +19,8 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var ctx = scope.ServiceProvider.GetRequiredService<NutriPlanContext>();
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NutriPlanContext>>();
+    using var ctx = factory.CreateDbContext();
     ctx.Database.EnsureCreated();
 }
 

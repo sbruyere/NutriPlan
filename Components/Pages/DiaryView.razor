@@ -1,143 +1,225 @@
 @page "/carnet/{AccessCode}/journal"
-@rendermode InteractiveServer
 @inject DiaryService DiaryService
 @inject DiarySessionService Session
-@inject NavigationManager Nav
 
 <PageTitle>Mon carnet — NutriPlan</PageTitle>
 
-@if (!isAuthorized)
+@if (diary == null && !isLoading)
 {
-    <div class="text-center text-gray-400 py-12">Redirection…</div>
-    return;
-}
-@if (diary == null)
-{
-    <div class="text-center text-gray-400 py-12">Chargement…</div>
-    return;
-}
-
-<div class="space-y-4">
-
-    <!-- En-tête + navigation -->
-    <div class="flex items-center justify-between flex-wrap gap-2">
-        <div>
-            <h1 class="text-lg font-bold text-gray-800">Mon carnet alimentaire</h1>
-            <p class="text-xs text-gray-400 font-mono">@AccessCode</p>
-        </div>
-        <div class="flex items-center gap-2">
-            @if (!showHistory)
-            {
-                <!-- Bascule vue carte / tableau -->
-                <div class="flex bg-gray-100 rounded-lg p-0.5 text-xs font-medium">
-                    <button @onclick="() => tableView = false"
-                            class="px-3 py-1.5 rounded-md transition-colors @(tableView ? "text-gray-500" : "bg-white shadow text-gray-800")">
-                        ☰ Cartes
-                    </button>
-                    <button @onclick="() => tableView = true"
-                            class="px-3 py-1.5 rounded-md transition-colors @(tableView ? "bg-white shadow text-gray-800" : "text-gray-500")">
-                        ⊞ Tableau
-                    </button>
-                </div>
-            }
-            <button @onclick="() => showHistory = !showHistory"
-                    class="text-sm text-primary-600 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
-                @(showHistory ? "← Journée" : "Historique")
-            </button>
+    <div class="max-w-sm mx-auto py-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 text-center">
+            <div class="text-3xl mb-2">🔍</div>
+            <h2 class="text-base font-semibold text-gray-700 mb-3">Carnet introuvable</h2>
+            <a href="/" class="inline-block bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+                Retour à l'accueil
+            </a>
         </div>
     </div>
-
-    @if (showHistory)
-    {
-        <HistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
-    }
-    else
-    {
-        <!-- Sélecteur de date -->
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center justify-between">
-            <button @onclick="PreviousDay" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">←</button>
-            <div class="text-center">
-                <p class="font-semibold text-gray-800 capitalize">
-                    @selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
-                </p>
-                @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
-                {
-                    <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">Aujourd'hui</span>
-                }
+}
+else if (isLoading)
+{
+    <div class="text-center text-gray-400 py-12">Chargement…</div>
+}
+else if (showPinForm)
+{
+    <div class="max-w-sm mx-auto py-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+            <div class="text-center mb-4">
+                <div class="text-3xl mb-1.5">🔒</div>
+                <h2 class="text-base font-bold text-gray-800">Carnet protégé</h2>
+                <p class="text-gray-400 text-xs mt-1">Saisissez votre code PIN pour accéder à votre carnet.</p>
             </div>
-            <button @onclick="NextDay" disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
-                    class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 text-gray-500 transition-colors">→</button>
+            <div class="space-y-3">
+                <input @bind="pinInput" @bind:event="oninput" @onkeyup="OnPinKeyUp"
+                       type="password" placeholder="Code PIN"
+                       class="w-full bg-slate-50 rounded-lg px-4 py-2 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-300 border-0"
+                       maxlength="8" />
+                @if (pinError)
+                {
+                    <p class="text-red-500 text-xs text-center">Code PIN incorrect.</p>
+                }
+                <button @onclick="ValidatePin"
+                        class="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+                    Accéder à mon carnet
+                </button>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="space-y-3">
+        <!-- En-tête compact -->
+        <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+                <h1 class="text-sm font-semibold text-gray-700 truncate">Mon carnet</h1>
+                <span class="text-[10px] text-gray-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">@AccessCode</span>
+            </div>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+                @if (!showHistory)
+                {
+                    <div class="flex bg-slate-100 rounded-md p-0.5 text-[11px] font-medium">
+                        <button @onclick="() => tableView = false"
+                                class="px-2.5 py-1 rounded transition-colors @(!tableView ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">
+                            Frise
+                        </button>
+                        <button @onclick="() => tableView = true"
+                                class="px-2.5 py-1 rounded transition-colors @(tableView ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">
+                            Tableau
+                        </button>
+                    </div>
+                }
+                <button @onclick="() => showHistory = !showHistory"
+                        class="text-xs text-primary-600 border border-primary-200 hover:border-primary-400 px-2.5 py-1 rounded-lg transition-colors">
+                    @(showHistory ? "← Journée" : "Historique")
+                </button>
+            </div>
         </div>
 
-        @if (tableView)
+        @if (showHistory)
         {
-            <!-- Vue tableau -->
-            <DiaryTableView
-                DailyLog="@currentLog"
-                DiaryId="@diary.Id"
-                Date="@selectedDate"
-                OnChanged="@LoadDay" />
-
-            <!-- Notes générales (hors tableau) -->
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <label class="block text-xs font-medium text-gray-500 mb-1.5">📝 Notes générales</label>
-                <textarea @bind="generalNotes" @onblur="SaveDaySummary" rows="2"
-                          placeholder="Observations, remarques…"
-                          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
-            </div>
+            <HistoryView DiaryId="@diary!.Id" OnDateSelected="SelectDate" />
         }
         else
         {
-            <!-- Vue cartes -->
-            @foreach (var mealDef in MealDefinitions)
-            {
-                var mealLog = currentLog?.MealLogs.FirstOrDefault(m => m.MealType == mealDef.Type);
-                <MealSection
-                    MealType="@mealDef.Type"
-                    MealLabel="@mealDef.Label"
-                    MealIcon="@mealDef.Icon"
-                    MealLog="@mealLog"
-                    OnSave="@(async (args) => await SaveMealSection(mealDef.Type, args))"
-                    OnAddFood="@(async (entry) => await AddFoodEntry(mealDef.Type, entry))"
-                    OnDeleteFood="@(async (id) => await DeleteFoodEntry(id))" />
-            }
+            <!-- Navigation date -->
+            <div class="bg-white rounded-xl border border-slate-100 shadow-sm px-2 py-1.5 flex items-center gap-2">
+                <button @onclick="PreviousDay" class="p-1.5 rounded-lg hover:bg-slate-50 text-gray-400 transition-colors text-sm leading-none">←</button>
+                <div class="text-center flex-1 flex items-center justify-center gap-2">
+                    <p class="font-semibold text-gray-700 capitalize text-sm">
+                        @selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                    </p>
+                    @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
+                    {
+                        <span class="text-[10px] bg-primary-100 text-primary-600 px-1.5 py-0.5 rounded-full flex-shrink-0">Auj.</span>
+                    }
+                </div>
+                <button @onclick="NextDay" disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
+                        class="p-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-30 text-gray-400 transition-colors text-sm leading-none">→</button>
+            </div>
 
-            <!-- Résumé de la journée -->
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <h3 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                    <span>📊</span> Bilan de la journée
-                </h3>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1.5">💧 Hydratation</label>
-                        <input @bind="hydration" @onblur="SaveDaySummary" type="text"
-                               placeholder="ex: 6 verres, 1,5L d'eau, 2 cafés…"
-                               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
-                        <p class="text-xs text-gray-300 mt-1">Eau, thé, tisanes, café, autre</p>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1.5">🧘 Émotions / Stress</label>
-                        <textarea @bind="emotions" @onblur="SaveDaySummary" rows="2"
-                                  placeholder="Comment vous sentez-vous ?"
-                                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1.5">🏃 Sport / Activité physique</label>
-                        <textarea @bind="physicalActivity" @onblur="SaveDaySummary" rows="2"
-                                  placeholder="Type, durée, intensité…"
-                                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
+            @if (tableView)
+            {
+                <DiaryTableView
+                    DailyLog="@currentLog"
+                    DiaryId="@diary!.Id"
+                    Date="@selectedDate"
+                    OnChanged="@LoadDay" />
+            }
+            else
+            {
+                <!-- Frise verticale -->
+                <div class="relative">
+                    <!-- Ligne verticale -->
+                    <div class="absolute left-4 top-4 bottom-4 w-px bg-slate-200 z-0"></div>
+
+                    <div class="space-y-1">
+                        @for (int si = 0; si < DiaryService.MealSlots.Length; si++)
+                        {
+                            int slotIdx = si;
+                            var slot = DiaryService.MealSlots[slotIdx];
+                            var mealEvent = GetMealSlotEvent(slotIdx);
+                            var activities = GetActivitiesAfterSlot(slotIdx == 0 ? null : slotIdx - 1);
+
+                            <!-- Activités avant ce jalon (sauf pour le premier : affichées après le jalon précédent) -->
+                            @if (slotIdx == 0)
+                            {
+                                <!-- Activités avant le premier jalon -->
+                                var before = GetActivitiesBeforeAll();
+                                @foreach (var act in before)
+                                {
+                                    <div class="flex gap-2 items-start pl-10 mb-1.5">
+                                        <EventCard Event="act" OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                    </div>
+                                }
+                                @if (before.Any())
+                                {
+                                    <div class="pl-10 mb-1.5">
+                                        <button @onclick="() => AddActivity(null)" class="@AddActivityBtnClass">+ Activité</button>
+                                    </div>
+                                }
+                            }
+
+                            <!-- Nœud du jalon alimentaire -->
+                            <div class="flex gap-2.5 items-start relative z-10 mb-0.5">
+                                <!-- Icône sur la frise -->
+                                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white border-2 @SlotBorderClass(slotIdx) flex items-center justify-center text-sm shadow-sm z-10">
+                                    @slot.Icon
+                                </div>
+                                <!-- Contenu -->
+                                <div class="flex-1 min-w-0">
+                                    @if (mealEvent == null)
+                                    {
+                                        <!-- Jalon vide -->
+                                        <div class="bg-white rounded-xl border border-dashed border-slate-200 px-3 py-2 flex items-center gap-2">
+                                            <div class="flex-1 min-w-0">
+                                                <p class="font-medium text-gray-400 text-sm">@slot.Label</p>
+                                                <p class="text-[10px] text-gray-300 font-mono">@slot.DefaultTime.ToString("HH:mm")</p>
+                                            </div>
+                                            <button @onclick="() => StartMealSlot(slotIdx)"
+                                                    class="flex-shrink-0 bg-primary-50 hover:bg-primary-100 text-primary-600 border border-primary-200 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors">
+                                                + Saisir
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <EventCard Event="mealEvent"
+                                                   ConcurrentActivities="@GetConcurrentActivities(slotIdx)"
+                                                   OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Zone inter-jalons (activités + bouton ajouter) -->
+                            <div class="pl-10 py-1 space-y-1.5">
+                                @foreach (var act in GetActivitiesAfterSlot(slotIdx))
+                                {
+                                    <EventCard Event="act" OnChanged="LoadDay" OnDelete="DeleteEvent" />
+                                }
+                                <button @onclick="() => AddActivity(slotIdx)" class="@AddActivityBtnClass">
+                                    + Activité sportive
+                                </button>
+                            </div>
+                        }
                     </div>
                 </div>
-                <div class="mt-3">
-                    <label class="block text-xs font-medium text-gray-500 mb-1.5">📝 Notes générales</label>
-                    <textarea @bind="generalNotes" @onblur="SaveDaySummary" rows="2"
-                              placeholder="Observations, remarques…"
-                              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
+            }
+
+            <!-- Bilan journée -->
+            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-3">
+                <h3 class="font-semibold text-gray-600 mb-3 flex items-center gap-1.5 text-sm"><span>📊</span> Bilan de la journée</h3>
+
+                <!-- Stats calculées automatiquement -->
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div class="bg-blue-50 rounded-lg px-3 py-2">
+                        <p class="text-[10px] text-blue-400 font-medium mb-0.5">💧 Hydratation</p>
+                        <p class="text-base font-bold text-blue-700 leading-tight">@FormatHydration(EstimatedHydrationMl)</p>
+                        <p class="text-[10px] text-blue-300">@TotalDrinksCount prise(s)</p>
+                    </div>
+                    <div class="bg-emerald-50 rounded-lg px-3 py-2">
+                        <p class="text-[10px] text-emerald-400 font-medium mb-0.5">🏃 Activité</p>
+                        <p class="text-base font-bold text-emerald-700 leading-tight">@FormatActivity(TotalActivityMinutes)</p>
+                        <p class="text-[10px] text-emerald-300">@TotalActivityCount activité(s)</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-400 mb-1">🧘 Émotions / Stress (journée)</label>
+                        <textarea @bind="emotions" @onblur="SaveDaySummary" rows="2" placeholder="Comment vous sentez-vous globalement aujourd'hui ?"
+                                  class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-400 mb-1">📝 Notes générales</label>
+                        <textarea @bind="generalNotes" @onblur="SaveDaySummary" rows="2" placeholder="Observations, remarques…"
+                                  class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-300"></textarea>
+                    </div>
                 </div>
             </div>
         }
-    }
-</div>
+    </div>
+}
 
 @code {
     [Parameter] public string AccessCode { get; set; } = "";
@@ -145,91 +227,143 @@
     FoodDiary? diary;
     DailyLog? currentLog;
     DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Today);
-    bool isAuthorized;
+    bool isLoading = true;
+    bool showPinForm;
+    bool pinError;
+    string pinInput = "";
     bool showHistory;
     bool tableView;
+    string emotions = "", generalNotes = "";
 
-    string hydration = "", emotions = "", physicalActivity = "", generalNotes = "";
-
-    static readonly (MealType Type, string Label, string Icon)[] MealDefinitions =
-    [
-        (MealType.PetitDejeuner,      "Petit-déjeuner",    "☕"),
-        (MealType.CollationMatin,     "Collation matin",   "🍎"),
-        (MealType.Dejeuner,           "Déjeuner",          "🍽️"),
-        (MealType.CollationApresMidi, "Collation après-midi", "🫐"),
-        (MealType.Diner,              "Dîner",             "🌙"),
-        (MealType.CollationSoir,      "Collation soir",    "🌛"),
-    ];
+    const string AddActivityBtnClass =
+        "w-full border border-dashed border-gray-200 hover:border-green-300 text-gray-300 hover:text-green-500 rounded-xl py-1.5 text-xs font-medium transition-colors";
 
     protected override async Task OnParametersSetAsync()
     {
+        isLoading = true; showPinForm = false; pinError = false;
         var code = AccessCode.ToUpperInvariant();
-        if (!Session.IsUnlocked(code))
-        {
-            Nav.NavigateTo($"/carnet/{code}", replace: true);
-            return;
-        }
-        isAuthorized = true;
         diary = await DiaryService.GetDiaryByCodeAsync(code);
-        if (diary != null) await LoadDay();
+        if (diary == null) { isLoading = false; return; }
+        if (diary.PinHash != null && !Session.IsUnlocked(code)) { showPinForm = true; isLoading = false; return; }
+        Session.Unlock(code); isLoading = false;
+        await LoadDay();
     }
+
+    async Task ValidatePin()
+    {
+        pinError = false;
+        var valid = await DiaryService.ValidatePinAsync(diary!.AccessCode, pinInput);
+        if (valid) { Session.Unlock(diary.AccessCode); showPinForm = false; await LoadDay(); }
+        else { pinError = true; }
+    }
+
+    void OnPinKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") _ = ValidatePin(); }
 
     async Task LoadDay()
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
-        hydration = currentLog?.Hydration ?? "";
         emotions = currentLog?.Emotions ?? "";
-        physicalActivity = currentLog?.PhysicalActivity ?? "";
         generalNotes = currentLog?.GeneralNotes ?? "";
     }
 
-    async Task PreviousDay()
-    {
-        selectedDate = selectedDate.AddDays(-1);
-        await LoadDay();
-    }
+    async Task PreviousDay() { selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
 
     async Task NextDay()
     {
-        if (selectedDate < DateOnly.FromDateTime(DateTime.Today))
-        {
-            selectedDate = selectedDate.AddDays(1);
-            await LoadDay();
-        }
+        if (selectedDate < DateOnly.FromDateTime(DateTime.Today)) { selectedDate = selectedDate.AddDays(1); await LoadDay(); }
     }
 
-    void SelectDate(DateOnly date)
-    {
-        selectedDate = date;
-        showHistory = false;
-        _ = LoadDay();
-    }
+    void SelectDate(DateOnly date) { selectedDate = date; showHistory = false; _ = LoadDay(); }
 
-    async Task SaveMealSection(MealType mealType, (int? Hunger, int? Satiety, string? Sensations) args)
+    async Task StartMealSlot(int slotIndex)
     {
         currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
-        var meal = await DiaryService.GetOrCreateMealLogAsync(currentLog.Id, mealType);
-        await DiaryService.UpdateMealLogAsync(meal.Id, args.Hunger, args.Satiety, args.Sensations);
+        await DiaryService.GetOrCreateMealSlotEventAsync(currentLog.Id, slotIndex);
         await LoadDay();
     }
 
-    async Task AddFoodEntry(MealType mealType, FoodEntry entry)
+    async Task AddActivity(int? afterSlot)
     {
         currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
-        var meal = await DiaryService.GetOrCreateMealLogAsync(currentLog.Id, mealType);
-        await DiaryService.AddFoodEntryAsync(meal.Id, entry);
+        await DiaryService.AddActivityAfterSlotAsync(currentLog.Id, afterSlot);
         await LoadDay();
     }
 
-    async Task DeleteFoodEntry(int entryId)
+    async Task DeleteEvent(int eventId)
     {
-        await DiaryService.DeleteFoodEntryAsync(entryId);
+        await DiaryService.DeleteEventAsync(eventId);
         await LoadDay();
     }
 
     async Task SaveDaySummary()
     {
         currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
-        await DiaryService.UpdateDailyLogSummaryAsync(currentLog.Id, hydration, emotions, physicalActivity, generalNotes);
+        await DiaryService.UpdateDailyLogSummaryAsync(currentLog.Id, null, emotions, generalNotes);
     }
+
+    // ── Stats calculées ──────────────────────────────────────────────────────
+
+    static readonly Dictionary<string, int> DrinkVolumes = new()
+    {
+        { "Eau (1 verre)",      250 }, { "Eau (75cl)",        750 }, { "Eau (1,5L)",       1500 },
+        { "Eau gazeuse",        250 }, { "Café expresso",      30 }, { "Café allongé",      120 },
+        { "Thé (grande tasse)", 350 }, { "Boisson isotonique", 500 }, { "Électrolytes",      500 },
+        { "Sirop",              200 }, { "Jus de fruit",       200 },
+    };
+
+    int EstimatedHydrationMl => (currentLog?.Events ?? [])
+        .SelectMany(e => e.DrinkEntries)
+        .Sum(d => DrinkVolumes.TryGetValue(d.DrinkName, out var v) ? v : 200);
+
+    int TotalDrinksCount => (currentLog?.Events ?? [])
+        .Sum(e => e.DrinkEntries.Count);
+
+    int TotalActivityMinutes => (currentLog?.Events ?? [])
+        .Where(e => e.EventType == DayEventType.Activity && e.DurationMinutes.HasValue)
+        .Sum(e => e.DurationMinutes!.Value);
+
+    int TotalActivityCount => (currentLog?.Events ?? [])
+        .Count(e => e.EventType == DayEventType.Activity);
+
+    static string FormatHydration(int ml) =>
+        ml == 0 ? "—" : ml >= 1000 ? $"≈ {ml / 1000.0:0.#} L" : $"≈ {ml} ml";
+
+    static string FormatActivity(int minutes) =>
+        minutes == 0 ? "—" :
+        minutes >= 60 ? $"{minutes / 60}h{(minutes % 60 > 0 ? $" {minutes % 60}min" : "")}" :
+        $"{minutes} min";
+
+    DayEvent? GetMealSlotEvent(int slotIndex)
+        => currentLog?.Events.FirstOrDefault(e => e.MealSlot == slotIndex);
+
+    IEnumerable<DayEvent> GetActivitiesBeforeAll()
+        => (currentLog?.Events ?? [])
+            .Where(e => e.EventType == DayEventType.Activity
+                     && e.ActivityAfterSlot == null
+                     && !e.ConcurrentWithMealSlot.HasValue)
+            .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt);
+
+    IEnumerable<DayEvent> GetActivitiesAfterSlot(int? afterSlot)
+        => (currentLog?.Events ?? [])
+            .Where(e => e.EventType == DayEventType.Activity
+                     && e.ActivityAfterSlot == afterSlot
+                     && !e.ConcurrentWithMealSlot.HasValue)
+            .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt);
+
+    IReadOnlyList<DayEvent> GetConcurrentActivities(int slotIdx)
+        => (currentLog?.Events ?? [])
+            .Where(e => e.EventType == DayEventType.Activity && e.ConcurrentWithMealSlot == slotIdx)
+            .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt)
+            .ToList();
+
+    static string SlotBorderClass(int idx) => idx switch
+    {
+        0 => "border-amber-300",
+        1 => "border-green-300",
+        2 => "border-blue-300",
+        3 => "border-purple-300",
+        4 => "border-indigo-300",
+        5 => "border-slate-300",
+        _ => "border-gray-200"
+    };
 }

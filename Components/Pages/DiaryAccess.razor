@@ -1,98 +1,11 @@
 @page "/carnet/{AccessCode}"
-@rendermode InteractiveServer
-@inject DiaryService DiaryService
-@inject DiarySessionService Session
 @inject NavigationManager Nav
-
-<PageTitle>Accès carnet — NutriPlan</PageTitle>
-
-<div class="max-w-md mx-auto py-8">
-    @if (isLoading)
-    {
-        <div class="text-center text-gray-400 py-12">Chargement…</div>
-    }
-    else if (diary == null)
-    {
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
-            <div class="text-4xl mb-3">🔍</div>
-            <h2 class="text-lg font-semibold text-gray-700 mb-2">Carnet introuvable</h2>
-            <p class="text-gray-400 text-sm mb-4">Le code <strong>@AccessCode</strong> ne correspond à aucun carnet.</p>
-            <a href="/" class="inline-block bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-primary-700 transition-colors">
-                Retour à l'accueil
-            </a>
-        </div>
-    }
-    else if (needsPin)
-    {
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <div class="text-center mb-6">
-                <div class="text-4xl mb-2">🔒</div>
-                <h2 class="text-xl font-bold text-gray-800">Carnet protégé</h2>
-                <p class="text-gray-400 text-sm mt-1">Saisissez votre code PIN pour accéder à votre carnet.</p>
-            </div>
-            <div class="space-y-4">
-                <input @bind="pinInput"
-                       @onkeyup="OnKeyUp"
-                       type="password"
-                       placeholder="Code PIN"
-                       class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-300"
-                       maxlength="8" />
-                @if (pinError)
-                {
-                    <p class="text-red-500 text-sm text-center">Code PIN incorrect.</p>
-                }
-                <button @onclick="ValidatePin"
-                        class="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-xl font-medium transition-colors">
-                    Accéder à mon carnet
-                </button>
-            </div>
-        </div>
-    }
-</div>
 
 @code {
     [Parameter] public string AccessCode { get; set; } = "";
 
-    FoodDiary? diary;
-    bool isLoading = true;
-    bool needsPin;
-    bool pinError;
-    string pinInput = "";
-
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
-        isLoading = true;
-        diary = await DiaryService.GetDiaryByCodeAsync(AccessCode.ToUpperInvariant());
-        if (diary != null)
-        {
-            needsPin = diary.PinHash != null;
-            if (!needsPin || Session.IsUnlocked(diary.AccessCode))
-            {
-                Session.Unlock(diary.AccessCode);
-                Nav.NavigateTo($"/carnet/{diary.AccessCode}/journal", replace: true);
-                return;
-            }
-        }
-        isLoading = false;
-    }
-
-    async Task ValidatePin()
-    {
-        pinError = false;
-        var valid = await DiaryService.ValidatePinAsync(diary!.AccessCode, pinInput);
-        if (valid)
-        {
-            Session.Unlock(diary.AccessCode);
-            Nav.NavigateTo($"/carnet/{diary.AccessCode}/journal", replace: true);
-        }
-        else
-        {
-            pinError = true;
-        }
-    }
-
-    void OnKeyUp(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") _ = ValidatePin();
+        Nav.NavigateTo($"/carnet/{AccessCode.ToUpperInvariant()}/journal", replace: true);
     }
 }
