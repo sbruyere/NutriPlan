@@ -1,150 +1,686 @@
+@using System.Text
+@using System.Globalization
 @inject DiaryService DiaryService
+@inject ToastService Toast
 
-<div class="bg-white rounded-xl border border-slate-100 shadow-sm">
+@* Pas d'overflow-hidden sur la carte : les popovers (absolute) doivent pouvoir déborder. *@
+<div class="@(EditingActive ? "bg-white rounded-xl shadow-[0_18px_30px_-16px_rgba(8,12,16,.45)] p-4 -mx-1" : Event.EventType == DayEventType.Activity ? "bg-carbon rounded-lg p-3 pt-2.5 shadow-[0_14px_22px_-14px_rgba(8,12,16,.6)]" : "bg-white rounded-lg p-3 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]")">
+@if (!EditingActive)
+{
+    <!-- ── Mode lecture : section calme, tap sur le titre pour ouvrir l'éditeur ── -->
+    <div>
+        <button type="button" @onclick="HandleToggleEdit" class="w-full text-left group/read"
+                aria-label="Modifier @(string.IsNullOrEmpty(Event.Label) ? "cet événement" : Event.Label)">
+            @if (Event.EventType == DayEventType.Activity)
+            {
+                <span class="block text-[8.5px] font-extrabold tracking-[.18em] uppercase text-volt mb-0.5">Activité</span>
+            }
+            <div class="flex items-start gap-2">
+                <h3 class="flex-1 min-w-0 font-display text-[14px] font-extrabold tracking-tight @(Event.EventType == DayEventType.Activity ? "text-snow" : "text-carbon")">
+                    @(string.IsNullOrEmpty(Event.Label) ? "Sans titre" : Event.Label)
+                </h3>
+                @if (Event.EventType == DayEventType.Meal && (hungerBefore.HasValue || satietyAfter.HasValue))
+                {
+                    <!-- Évolution Faim → Rassasié : à côté du titre, flèche d'évolution entre les deux -->
+                    <span class="flex items-center gap-1.5 flex-shrink-0 -mt-0.5">
+                        <span class="text-right leading-none">
+                            <span class="block text-[7.5px] font-extrabold uppercase tracking-[.12em] text-[#9aa4ad] mb-0.5">Faim</span>
+                            <span class="font-display text-[17px] font-extrabold text-carbon tabular-nums leading-none">@(hungerBefore?.ToString() ?? "–")<span class="text-[9px] text-[#9aa4ad] font-bold">/10</span></span>
+                        </span>
+                        <svg viewBox="0 0 26 10" class="w-6 h-2.5 mt-2 text-[#aeb8c0] flex-shrink-0" aria-hidden="true" fill="none">
+                            <path d="M1 5h22m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <span class="leading-none">
+                            <span class="block text-[7.5px] font-extrabold uppercase tracking-[.12em] text-[#9aa4ad] mb-0.5">Rassasié</span>
+                            <span class="font-display text-[17px] font-extrabold text-carbon tabular-nums leading-none">@(satietyAfter?.ToString() ?? "–")<span class="text-[9px] text-[#9aa4ad] font-bold">/10</span></span>
+                        </span>
+                    </span>
+                }
+                <span class="text-sm transition-colors @(Event.EventType == DayEventType.Activity ? "text-[#4a525a]" : "text-gray-300 group-hover/read:text-gray-500")" aria-hidden="true">✎</span>
+            </div>
+            @if (Event.EventType == DayEventType.Meal)
+            {
+                @* Les aliments d'abord, en évidence : c'est le contenu central du repas *@
+                @if (UngroupedFoods.Any())
+                {
+                    <p class="mt-2 text-[15px] leading-snug">
+                        @{ var readFirst = true; }
+                        @foreach (var f in UngroupedFoods)
+                        {
+                            if (!readFirst) { <span class="text-gray-300"> · </span> }
+                            readFirst = false;
+                            <span class="text-carbon font-bold">@f.FoodName</span>
+                            @if (!string.IsNullOrEmpty(FormatQty(f))) { <span class="text-[12px] text-gray-400 font-medium">&nbsp;@FormatQty(f)</span> }
+                        }
+                    </p>
+                }
+                @* Une préparation = 1 item composé d'autres items : zone entourée regroupant ses aliments *@
+                @foreach (var grp in GroupedFoods)
+                {
+                    <div class="mt-2 rounded-lg border border-[#d6dde3] bg-[#f7f9fb] px-2.5 py-2">
+                        <p class="text-[15px] leading-none text-carbon font-bold">@grp.Key</p>
+                        <p class="mt-1.5 text-[13px] leading-snug text-gray-600">
+                            @{ var gFirst = true; }
+                            @foreach (var f in grp.OrderBy(x => x.SortOrder).ThenBy(x => x.CreatedAt))
+                            {
+                                if (!gFirst) { <span class="text-gray-300"> · </span> }
+                                gFirst = false;
+                                <span class="font-medium">@f.FoodName</span>
+                                @if (!string.IsNullOrEmpty(FormatQty(f))) { <span class="text-[11.5px] text-gray-400">&nbsp;@FormatQty(f)</span> }
+                            }
+                        </p>
+                    </div>
+                }
+                @foreach (var act in ConcurrentActivities)
+                {
+                    <p class="mt-1 text-[12px] font-semibold text-[#4a545e]">🏃 @act.Label@(act.DurationMinutes.HasValue ? $" · {act.DurationMinutes} min" : "")</p>
+                }
+                @* Total kcal + le reste (hydratation, émotions, digestion) en chips discrets *@
+                @if (MealKcalTotal != null || drinks.Count > 0 || !string.IsNullOrEmpty(emotions) || !string.IsNullOrEmpty(sensations))
+                {
+                    <div class="flex flex-wrap gap-1 mt-2.5 items-center">
+                        @if (MealKcalTotal is double mealKcal)
+                        {
+                            <span class="bg-carbon text-volt rounded-[5px] px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-wide tabular-nums">≈ @((int)Math.Round(mealKcal)) kcal</span>
+                            @* Macros P/G/L — utile pour la nutrition sportive *@
+                            @if (MealNutrient(c => c.ProteinPer100g) is double mealProt)
+                            { <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d] tabular-nums">P&nbsp;@mealProt.ToString("0")&nbsp;g</span> }
+                            @if (MealNutrient(c => c.CarbsPer100g) is double mealCarb)
+                            { <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d] tabular-nums">G&nbsp;@mealCarb.ToString("0")&nbsp;g</span> }
+                            @if (MealNutrient(c => c.FatPer100g) is double mealFat)
+                            { <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d] tabular-nums">L&nbsp;@mealFat.ToString("0")&nbsp;g</span> }
+                        }
+                        @foreach (var (dname, dcount, _) in DrinkGroups)
+                        { <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d]">💧 @(dcount > 1 ? $"{dcount}× " : "")@dname</span> }
+                        @if (!string.IsNullOrEmpty(emotions))
+                        { <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d]">💭 @EmotionSummary</span> }
+                        @if (!string.IsNullOrEmpty(sensations))
+                        { <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d]">🫁 @SensationSummary</span> }
+                    </div>
+                }
+            }
+            else
+            {
+                <p class="mt-1 flex items-center gap-2 text-[12px] text-[#97a1aa]">
+                    @if (durationMinutes.HasValue) { <span class="font-display text-[13px] font-extrabold text-volt tabular-nums">@durationMinutes min</span> }
+                    @if (!string.IsNullOrEmpty(intensity)) { <span class="font-semibold">@intensity</span> }
+                    @if (caloriesBurned is int burned && burned > 0) { <span class="font-display text-[12.5px] font-extrabold text-snow tabular-nums">−@burned kcal</span> }
+                    @if (distanceKm is double km && km > 0) { <span class="font-semibold tabular-nums">@km.ToString("0.#") km</span> }
+                    @if (elevationM is int dplus && dplus > 0) { <span class="font-semibold tabular-nums">D+ @dplus m</span> }
+                    @if (IntensityTicks > 0)
+                    {
+                        <span class="inline-flex gap-[3px] ml-auto" aria-hidden="true">
+                            @for (var tick = 0; tick < 3; tick++)
+                            {
+                                <span class="inline-block w-1 h-2.5 rounded-[1px] -skew-x-12 @(tick < IntensityTicks ? "bg-volt" : "bg-carbon-2")"></span>
+                            }
+                        </span>
+                    }
+                    @if (!durationMinutes.HasValue && string.IsNullOrEmpty(intensity)) { <span>Détails à compléter</span> }
+                </p>
+            }
+        </button>
+        @if (photos.Count > 0)
+        {
+            <button type="button" @onclick="() => lightboxUrl = photos[0].FilePath" aria-label="Agrandir la photo" class="block w-full mt-2">
+                <img src="@photos[0].FilePath" alt="Photo" class="w-full max-h-52 object-cover rounded-lg" />
+            </button>
+        }
+        @if (lightboxUrl != null)
+        {
+            <div class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center cursor-zoom-out"
+                 @onclick="() => lightboxUrl = null">
+                <img src="@lightboxUrl" class="max-w-[92vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" />
+                <button class="absolute top-4 right-5 text-snow text-3xl leading-none opacity-70 hover:opacity-100 transition-opacity p-2 -m-2"
+                        aria-label="Fermer l'aperçu de la photo"
+                        @onclick="() => lightboxUrl = null">✕</button>
+            </div>
+        }
+    </div>
+}
+else
+{
 
-    <!-- ── Ligne 1 : icône / label / heure / supprimer ────────────────── -->
-    <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-50 rounded-t-xl">
-        <span class="text-base flex-shrink-0">@(Event.EventType == DayEventType.Activity ? "🏃" : "🍽️")</span>
+    <!-- ── En-tête : poignée drag / icône / label / heure / supprimer ──── -->
+    <div class="flex items-center gap-2 py-1">
+        <span class="text-base flex-shrink-0 select-none @(OnCardDragStart.HasDelegate ? "cursor-grab active:cursor-grabbing" : "")"
+              draggable="@(OnCardDragStart.HasDelegate ? "true" : "false")"
+              @ondragstart="HandleCardDragStart"
+              @ondragend="HandleCardDragEnd"
+              aria-hidden="true"
+              title="@(OnCardDragStart.HasDelegate ? "Glisser pour déplacer" : "")">
+            @(Event.EventType == DayEventType.Activity ? "🏃" : "🍽️")
+        </span>
         <input type="text" @bind="labelEdit" @onblur="SaveLabel"
                placeholder="@(Event.EventType == DayEventType.Activity ? "ex: Trail, Yoga…" : "ex: Déjeuner, Collation…")"
-               class="flex-1 min-w-0 font-medium text-gray-700 bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-gray-300 text-sm" />
+               class="flex-1 min-w-0 font-display text-lg font-bold text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-gray-300" />
         <input type="time" value="@timeEdit" @onchange="SaveTime"
-               class="text-[11px] text-gray-400 bg-slate-50 border-0 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-300 w-20 flex-shrink-0" />
-        <button @onclick="Delete" title="Supprimer"
-                class="text-gray-200 hover:text-red-400 transition-colors text-lg leading-none flex-shrink-0 w-5 text-center">×</button>
+               class="text-xs text-gray-400 bg-slate-50 border-0 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-300 w-20 flex-shrink-0" />
+        <button @onclick="HandleToggleEdit" aria-label="Fermer l'édition"
+                class="text-xs font-semibold text-gray-400 hover:text-gray-700 px-2 py-1 flex-shrink-0 transition-colors">Fermer ✕</button>
+        @if (confirmingDelete)
+        {
+            <div class="flex items-center gap-1 flex-shrink-0">
+                <button @onclick="Delete"
+                        class="text-[11px] px-2 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-snow font-medium transition-colors">Supprimer</button>
+                <button @onclick="() => confirmingDelete = false"
+                        class="text-[11px] px-2 py-1 rounded-lg text-gray-500 hover:bg-slate-50 transition-colors">Annuler</button>
+            </div>
+        }
+        else
+        {
+            <button @onclick="() => confirmingDelete = true" title="Supprimer" aria-label="Supprimer cet événement"
+                    class="text-gray-400 hover:text-red-500 transition-colors text-lg leading-none flex-shrink-0 p-1.5 -my-1">×</button>
+        }
     </div>
 
-    <!-- ── Ligne 2 : pills Faim / Rassasiement / Sensations / Émotions ── -->
     @if (Event.EventType == DayEventType.Meal)
     {
-        <div class="flex flex-wrap gap-1.5 px-3 py-1.5 bg-slate-50/60 border-b border-slate-50">
+        <!-- ── DÉBUT du jalon : Faim (slider) + Émotions ───────────────── -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
 
-            <!-- Faim avant -->
-            <div class="group relative">
-                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(hungerBefore.HasValue ? ScorePillClass(hungerBefore.Value) : "border-gray-100 text-gray-300 bg-white")">
-                    Faim
-                    <span class="@(hungerBefore.HasValue ? "font-bold" : "")">@(hungerBefore.HasValue ? $"{hungerBefore}/10" : "—")</span>
-                </button>
-                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
-                    <div class="flex gap-0.5 flex-wrap bg-white border border-gray-100 rounded-xl shadow-lg p-1.5" style="width:192px">
-                        @for (int i = 0; i <= 10; i++) { var s = i;
-                            <button @onclick="() => SetHunger(s)" class="w-7 h-7 rounded text-xs font-semibold transition-colors @ScoreClass(s, hungerBefore)">@s</button>
-                        }
-                        @if (hungerBefore.HasValue)
-                        {
-                            <button @onclick="() => SetHunger(null)" class="w-7 h-7 rounded text-xs text-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center">✕</button>
-                        }
-                    </div>
-                </div>
+            <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+                <span class="text-xs font-semibold text-amber-800 flex-shrink-0">🤤 Faim</span>
+                <input type="range" min="0" max="10" step="1"
+                       value="@(hungerBefore ?? 0)"
+                       @oninput="PreviewHunger" @onchange="CommitHunger"
+                       aria-label="Faim avant le repas, de 0 à 10"
+                       class="flex-1 min-w-[90px] accent-carbon cursor-pointer" />
+                <span class="inline-flex items-center justify-center min-w-11 px-1.5 py-0.5 rounded-md text-xs font-bold tabular-nums
+                             @(hungerBefore.HasValue ? ScorePillClass(hungerBefore.Value) : "bg-gray-100 text-gray-400")">
+                    @(hungerBefore.HasValue ? $"{hungerBefore}/10" : "—")
+                </span>
+                @if (hungerBefore.HasValue)
+                {
+                    <button @onclick="() => SetHunger(null)" aria-label="Effacer la note de faim"
+                            class="text-gray-400 hover:text-gray-600 text-base leading-none p-1 -m-1 flex-shrink-0">×</button>
+                }
             </div>
 
-            <!-- Rassasiement -->
-            <div class="group relative">
-                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(satietyAfter.HasValue ? ScorePillClass(satietyAfter.Value) : "border-gray-100 text-gray-300 bg-white")">
-                    Rass.
-                    <span class="@(satietyAfter.HasValue ? "font-bold" : "")">@(satietyAfter.HasValue ? $"{satietyAfter}/10" : "—")</span>
+            <div class="relative">
+                <button @onclick="() => TogglePanel(PanelEmotions)" aria-haspopup="true" aria-expanded="@(openPanel == PanelEmotions ? "true" : "false")"
+                        aria-label="Noter les émotions liées au repas"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors @(string.IsNullOrEmpty(emotions) ? "bg-purple-50 text-purple-600 hover:bg-purple-100" : "bg-purple-100 text-purple-800")">
+                    💭 Émotions
+                    <span class="@(string.IsNullOrEmpty(emotions) ? "font-normal text-purple-400" : "")">@EmotionSummary</span>
                 </button>
-                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
-                    <div class="flex gap-0.5 flex-wrap bg-white border border-gray-100 rounded-xl shadow-lg p-1.5" style="width:192px">
-                        @for (int i = 0; i <= 10; i++) { var s = i;
-                            <button @onclick="() => SetSatiety(s)" class="w-7 h-7 rounded text-xs font-semibold transition-colors @ScoreClass(s, satietyAfter)">@s</button>
-                        }
-                        @if (satietyAfter.HasValue)
-                        {
-                            <button @onclick="() => SetSatiety(null)" class="w-7 h-7 rounded text-xs text-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center">✕</button>
-                        }
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sensations -->
-            <div class="group relative">
-                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(string.IsNullOrEmpty(sensations) ? "border-gray-100 text-gray-300 bg-white" : "border-amber-200 text-amber-700 bg-amber-50")">
-                    Sensations
-                    <span class="@(string.IsNullOrEmpty(sensations) ? "" : "font-semibold")">@SensationSummary</span>
-                </button>
-                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
-                    <div class="bg-white border border-gray-100 rounded-xl shadow-lg p-2" style="min-width:270px">
-                        <div class="flex flex-wrap gap-1.5">
-                            @foreach (var chip in PhysicalSensationChips)
-                            {
-                                var c = chip;
-                                <button @onclick="() => ToggleSensationChip(c)"
-                                        class="px-2 py-1 rounded-lg text-xs border transition-colors @(SensationSelected(c) ? "bg-amber-100 border-amber-300 text-amber-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600")">
-                                    @(SensationSelected(c) ? "✓ " : "")@c
-                                </button>
-                            }
+                @if (openPanel == PanelEmotions)
+                {
+                    <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                    <div class="absolute right-0 top-full mt-0.5 z-30">
+                        <div class="bg-white rounded-xl shadow-lg p-2" style="width:min(270px, calc(100vw - 4rem))">
+                            <div class="flex flex-wrap gap-1.5">
+                                @foreach (var chip in EmotionChips) { var c = chip;
+                                    <button @onclick="() => ToggleEmotionChip(c)"
+                                            class="px-2 py-1.5 rounded-lg text-xs border transition-colors @(EmotionSelected(c) ? "bg-purple-100 border-purple-300 text-purple-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-purple-50 hover:text-purple-600")">
+                                        @(EmotionSelected(c) ? "✓ " : "")@c
+                                    </button>
+                                }
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Émotions -->
-            <div class="group relative">
-                <button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-default @(string.IsNullOrEmpty(emotions) ? "border-gray-100 text-gray-300 bg-white" : "border-purple-200 text-purple-700 bg-purple-50")">
-                    Émotions
-                    <span class="@(string.IsNullOrEmpty(emotions) ? "" : "font-semibold")">@EmotionSummary</span>
-                </button>
-                <div class="absolute left-0 top-full mt-0.5 z-30 hidden group-hover:block">
-                    <div class="bg-white border border-gray-100 rounded-xl shadow-lg p-2" style="min-width:270px">
-                        <div class="flex flex-wrap gap-1.5">
-                            @foreach (var chip in EmotionChips)
-                            {
-                                var c = chip;
-                                <button @onclick="() => ToggleEmotionChip(c)"
-                                        class="px-2 py-1 rounded-lg text-xs border transition-colors @(EmotionSelected(c) ? "bg-purple-100 border-purple-300 text-purple-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-purple-50 hover:text-purple-600")">
-                                    @(EmotionSelected(c) ? "✓ " : "")@c
-                                </button>
-                            }
-                        </div>
-                    </div>
-                </div>
+                }
             </div>
 
         </div>
-    }
 
-    <!-- ── Corps ──────────────────────────────────────────────────────── -->
-    <div class="px-3 py-2.5 space-y-3">
-
-        @if (Event.EventType == DayEventType.Activity)
+        @if (photos.Count > 0)
         {
-            <!-- Sport : dropdown multi-choix -->
+            <button type="button" @onclick="() => lightboxUrl = photos[0].FilePath" aria-label="Agrandir la photo du repas"
+                    class="block w-full mt-1">
+                <img src="@photos[0].FilePath" alt="Photo du repas" class="w-full max-h-56 object-cover rounded-xl" />
+            </button>
+        }
+
+        <!-- ── Corps central : Aliments + Photos + Hydratation ────────── -->
+        <div class="py-2 space-y-3">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <p class="text-[11px] font-medium text-gray-400">🎽 Type de sport</p>
-                    <div class="relative">
-                        <button @onclick="() => showSportPanel = !showSportPanel"
-                                class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] border border-primary-100 text-primary-400 hover:bg-primary-50 hover:text-primary-600 transition-colors">
-                            Choisir <span class="text-[9px]">@(showSportPanel ? "▲" : "▼")</span>
-                        </button>
-                        @if (showSportPanel)
+                <p class="text-[11px] font-medium text-gray-400 mb-1.5">Aliments
+                    @if (MealKcalTotal is double editKcal)
+                    { <span class="text-gray-500 font-semibold tabular-nums">· ≈ @((int)Math.Round(editKcal)) kcal</span> }
+                </p>
+
+                <!-- Aliments non groupés (zone de dépôt) -->
+                <div class="space-y-1 mb-1.5"
+                     @ondragover:preventDefault="true"
+                     @ondrop="async () => await DropFoodOnGroup(null)">
+                    @foreach (var food in UngroupedFoods)
+                    {
+                        var f = food;
+                        @if (editingFoodId == f.Id)
                         {
-                            <div class="fixed inset-0 z-20" @onclick="() => showSportPanel = false"></div>
-                            <div class="absolute left-0 top-full mt-1 z-30 bg-white border border-slate-100 rounded-xl shadow-xl p-2" style="width:310px">
-                                <div class="flex flex-wrap gap-1 max-h-36 overflow-y-auto mb-2">
-                                    @foreach (var sport in SportPresets)
-                                    {
-                                        var sp = sport;
-                                        <button @onclick="async () => { await SelectSport(sp); showSportPanel = false; }"
-                                                class="px-2 py-1 rounded-lg text-[11px] border whitespace-nowrap transition-colors @(labelEdit == sp ? "bg-primary-100 border-primary-300 text-primary-700 font-medium" : "bg-white border-slate-100 text-gray-500 hover:bg-primary-50 hover:text-primary-600 hover:border-primary-200")">
-                                            @(labelEdit == sp ? "✓ " : "")@sp
+                            <div class="border border-primary-200 rounded-lg p-1.5 bg-primary-50/20">
+                                <div class="flex gap-1.5 items-center">
+                                    <input @bind="editFoodName" @bind:event="oninput" @onkeyup="OnEditFoodKeyUp"
+                                           type="text" placeholder="Nom…"
+                                           class="flex-1 min-w-0 bg-white rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                                    <input @bind="editFoodQtyVal" @bind:event="oninput"
+                                           type="number" min="0" step="any" placeholder="Qté"
+                                           class="w-14 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
+                                    <select @bind="editFoodUnit"
+                                            class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[68px]">
+                                        @UnitOptions
+                                    </select>
+                                    <button @onclick="SaveFoodEdit" aria-label="Enregistrer la modification"
+                                            class="text-primary-600 hover:text-primary-800 font-bold text-sm px-1.5 py-1 flex-shrink-0">✓</button>
+                                    <button @onclick="CancelFoodEdit" aria-label="Annuler la modification"
+                                            class="text-gray-400 hover:text-gray-600 text-lg leading-none px-1.5 py-1 flex-shrink-0">×</button>
+                                </div>
+                                <div class="flex items-center gap-1.5 mt-1">
+                                    <span class="text-[11px] text-gray-400 flex-shrink-0">Composition</span>
+                                    <select @bind="editFoodGroup" aria-label="Déplacer vers une composition"
+                                            class="flex-1 min-w-0 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200">
+                                        <option value="">Aucune</option>
+                                        @foreach (var grpOption in EditGroupOptions()) { <option value="@grpOption">@grpOption</option> }
+                                    </select>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div draggable="true"
+                                 @ondragstart="() => StartFoodDrag(f.Id)"
+                                 @ondragstart:stopPropagation="true"
+                                 @ondragend="EndFoodDrag"
+                                 @ondragover:preventDefault="true"
+                                 @ondrop="async () => await DropFoodOnFood(f.Id)"
+                                 @ondrop:stopPropagation="true"
+                                 class="flex items-center gap-2 py-1 px-2 rounded-lg bg-white cursor-grab transition-colors">
+                                <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
+                                @{ var qty = FormatQty(f); var kcalUngrouped = KcalOf(f); }
+                                @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@qty</span> }
+                                @if (kcalUngrouped is double kcu) { <span class="text-[10px] text-gray-300 flex-shrink-0 tabular-nums">≈@((int)Math.Round(kcu)) kcal</span> }
+                                @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
+                                <button @onclick="async () => await MoveFood(f.Id, -1)" aria-label="Monter @f.FoodName"
+                                        class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↑</button>
+                                <button @onclick="async () => await MoveFood(f.Id, 1)" aria-label="Descendre @f.FoodName"
+                                        class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↓</button>
+                                <button @onclick="() => StartEditFood(f)" @ondragstart:stopPropagation="true"
+                                        aria-label="Modifier l'aliment @f.FoodName"
+                                        class="text-gray-400 hover:text-blue-500 transition-colors flex-shrink-0 p-1.5 -my-1">
+                                    <Icon Name="edit-2" Class="w-3.5 h-3.5" />
+                                </button>
+                                <button @onclick="() => DeleteFood(f.Id)" @ondragstart:stopPropagation="true"
+                                        aria-label="Supprimer l'aliment @f.FoodName"
+                                        class="text-gray-400 hover:text-red-500 transition-colors text-base leading-none flex-shrink-0 p-1.5 -my-1">×</button>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <!-- Compositions alimentaires -->
+                @foreach (var grp in GroupedFoods)
+                {
+                    var gName = grp.Key;
+                    <div class="border border-amber-100 rounded-lg overflow-hidden mb-1.5">
+                        <div class="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50/60 border-b border-amber-100">
+                            <span class="text-[11px] font-semibold text-amber-800 flex-1">🍽 @gName</span>
+                            <button @onclick="() => DeleteGroup(gName)" aria-label="Supprimer la composition @gName"
+                                    class="text-gray-400 hover:text-red-500 text-[10px] transition-colors px-1.5 py-1 -my-1">× Supprimer</button>
+                        </div>
+                        <div class="divide-y divide-slate-50 px-2"
+                             @ondragover:preventDefault="true"
+                             @ondrop="async () => await DropFoodOnGroup(gName)">
+                            @foreach (var food in grp.OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt))
+                            {
+                                var f = food;
+                                @if (editingFoodId == f.Id)
+                                {
+                                    <div class="border border-amber-200 rounded-lg p-1.5 bg-amber-50/20 my-1">
+                                        <div class="flex gap-1.5 items-center">
+                                            <input @bind="editFoodName" @bind:event="oninput" @onkeyup="OnEditFoodKeyUp"
+                                                   type="text" placeholder="Nom…"
+                                                   class="flex-1 min-w-0 bg-white rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 placeholder-gray-400" />
+                                            <input @bind="editFoodQtyVal" @bind:event="oninput"
+                                                   type="number" min="0" step="any" placeholder="Qté"
+                                                   class="w-14 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-amber-200 text-center placeholder-gray-400" />
+                                            <select @bind="editFoodUnit"
+                                                    class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-amber-200 max-w-[68px]">
+                                                @UnitOptions
+                                            </select>
+                                            <button @onclick="SaveFoodEdit" aria-label="Enregistrer la modification"
+                                                    class="text-amber-600 hover:text-amber-800 font-bold text-sm px-1.5 py-1 flex-shrink-0">✓</button>
+                                            <button @onclick="CancelFoodEdit" aria-label="Annuler la modification"
+                                                    class="text-gray-400 hover:text-gray-600 text-lg leading-none px-1.5 py-1 flex-shrink-0">×</button>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 mt-1">
+                                            <span class="text-[11px] text-gray-400 flex-shrink-0">Composition</span>
+                                            <select @bind="editFoodGroup" aria-label="Déplacer vers une composition"
+                                                    class="flex-1 min-w-0 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-amber-200">
+                                                <option value="">Aucune</option>
+                                                @foreach (var grpOption in EditGroupOptions()) { <option value="@grpOption">@grpOption</option> }
+                                            </select>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div draggable="true"
+                                         @ondragstart="() => StartFoodDrag(f.Id)"
+                                         @ondragstart:stopPropagation="true"
+                                         @ondragend="EndFoodDrag"
+                                         @ondragover:preventDefault="true"
+                                         @ondrop="async () => await DropFoodOnFood(f.Id)"
+                                         @ondrop:stopPropagation="true"
+                                         class="flex items-center gap-2 py-1 pl-1 cursor-grab">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-amber-200 flex-shrink-0"></span>
+                                        <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
+                                        @{ var qty = FormatQty(f); var kcalGrouped = KcalOf(f); }
+                                        @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@qty</span> }
+                                        @if (kcalGrouped is double kcg) { <span class="text-[10px] text-gray-300 flex-shrink-0 tabular-nums">≈@((int)Math.Round(kcg)) kcal</span> }
+                                        @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
+                                        <button @onclick="async () => await MoveFood(f.Id, -1)" aria-label="Monter @f.FoodName"
+                                                class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↑</button>
+                                        <button @onclick="async () => await MoveFood(f.Id, 1)" aria-label="Descendre @f.FoodName"
+                                                class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↓</button>
+                                        <button @onclick="() => StartEditFood(f)" @ondragstart:stopPropagation="true"
+                                                aria-label="Modifier l'aliment @f.FoodName"
+                                                class="text-gray-400 hover:text-amber-500 transition-colors flex-shrink-0 p-1.5 -my-1">
+                                            <Icon Name="edit-2" Class="w-3.5 h-3.5" />
+                                        </button>
+                                        <button @onclick="() => DeleteFood(f.Id)" @ondragstart:stopPropagation="true"
+                                                aria-label="Supprimer l'aliment @f.FoodName"
+                                                class="text-gray-400 hover:text-red-500 transition-colors text-base leading-none flex-shrink-0 p-1.5 -my-1">×</button>
+                                    </div>
+                                }
+                            }
+                        </div>
+                        @if (addingToCompoName == gName)
+                        {
+                            <div class="px-2 pb-2 pt-1 border-t border-amber-50">
+                                <div class="flex gap-1.5 items-center">
+                                    <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood" Placeholder="Aliment…"
+                                                      CssClass="w-full bg-slate-50 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 placeholder-gray-400" />
+                                    <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)" aria-label="Ajouter l'aliment"
+                                            class="bg-volt hover:bg-volt-dark disabled:opacity-30 text-carbon px-2.5 py-1.5 rounded-md text-sm font-bold transition-colors flex-shrink-0">+</button>
+                                    <button @onclick="() => addingToCompoName = null" aria-label="Fermer le formulaire d'ajout"
+                                            class="text-gray-400 hover:text-gray-600 text-lg leading-none flex-shrink-0 transition-colors px-1.5 py-1">×</button>
+                                </div>
+                                <div class="flex gap-1 items-center mt-1 flex-wrap">
+                                    <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
+                                           class="w-12 bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
+                                    <select @bind="newFoodQtyUnit" class="bg-slate-50 rounded-md px-1 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[72px]">
+                                        @UnitOptions
+                                    </select>
+                                    <span class="text-slate-200 text-xs select-none">│</span>
+                                    <input @bind="newFoodPrep" type="text" placeholder="Préparation…"
+                                           class="flex-1 min-w-[80px] bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-400" />
+                                </div>
+                                @QuickFoodChips
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="px-2.5 py-1">
+                                <button @onclick="() => StartAddFoodToCompo(gName)"
+                                        class="inline-flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-700 transition-colors">
+                                    <Icon Name="plus" Class="w-2.5 h-2.5" /> Aliment
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Composition en attente (nommée, pas encore de food) -->
+                @if (pendingCompoName != null)
+                {
+                    <div class="border border-amber-200 rounded-lg overflow-hidden mb-1.5 bg-amber-50/30">
+                        <div class="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50 border-b border-amber-100">
+                            <span class="text-[11px] font-semibold text-amber-800 flex-1">🍽 @pendingCompoName</span>
+                            <button @onclick="CancelAddCompo" class="text-gray-400 hover:text-red-500 text-[10px] transition-colors px-1.5 py-1 -my-1">× Annuler</button>
+                        </div>
+                        <div class="px-2 py-2">
+                            <div class="flex gap-1.5 items-center">
+                                <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood" Placeholder="Premier aliment de la préparation…"
+                                                  CssClass="w-full bg-white rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                                <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)" aria-label="Ajouter l'aliment"
+                                        class="bg-volt hover:bg-volt-dark disabled:opacity-30 text-carbon px-2.5 py-1.5 rounded-md text-sm font-bold transition-colors flex-shrink-0">+</button>
+                            </div>
+                            <div class="flex gap-1 items-center mt-1 flex-wrap">
+                                <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
+                                       class="w-12 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
+                                <select @bind="newFoodQtyUnit" class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[72px]">
+                                    @UnitOptions
+                                </select>
+                                <span class="text-slate-200 text-xs select-none">│</span>
+                                <input @bind="newFoodPrep" type="text" placeholder="Préparation…"
+                                       class="flex-1 min-w-[80px] bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-400" />
+                            </div>
+                            @QuickFoodChips
+                        </div>
+                    </div>
+                }
+
+                <!-- Ajout : mini-onglets « Aliment | Préparation » — le formulaire s'ouvre sous l'onglet actif -->
+                <div class="mt-1">
+                    <div class="inline-flex bg-[#eff3f6] rounded-lg p-0.5" role="tablist" aria-label="Ajouter au repas">
+                        <button role="tab" aria-selected="@(showAddFoodForm ? "true" : "false")"
+                                @onclick="() => { showAddFoodForm = !showAddFoodForm; showAddCompoForm = false; addingToCompoName = null; pendingCompoName = null; editingFoodId = null; }"
+                                class="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-[6px] transition-colors
+                                       @(showAddFoodForm ? "bg-white text-carbon shadow-sm" : "text-gray-500 hover:text-gray-700")">
+                            <Icon Name="plus" Class="w-3 h-3" /> Aliment
+                        </button>
+                        <button role="tab" aria-selected="@(showAddCompoForm ? "true" : "false")"
+                                @onclick="() => { showAddCompoForm = !showAddCompoForm; showAddFoodForm = false; addingToCompoName = null; editingFoodId = null; }"
+                                class="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-[6px] transition-colors
+                                       @(showAddCompoForm ? "bg-white text-carbon shadow-sm" : "text-gray-500 hover:text-gray-700")">
+                            <Icon Name="plus" Class="w-3 h-3" /> Préparation
+                        </button>
+                    </div>
+
+                    @if (showAddFoodForm)
+                    {
+                        <div class="mt-1.5 p-2 bg-slate-50 rounded-lg">
+                            <div class="flex gap-1.5 items-center">
+                                <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood"
+                                                  CssClass="w-full bg-white rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                                <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)" aria-label="Ajouter l'aliment"
+                                        class="bg-volt hover:bg-volt-dark disabled:opacity-30 text-carbon px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">+</button>
+                            </div>
+                            <div class="flex gap-1 items-center mt-1 flex-wrap">
+                                <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
+                                       class="w-12 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
+                                <select @bind="newFoodQtyUnit" class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[72px]">
+                                    @UnitOptions
+                                </select>
+                                <span class="text-slate-200 text-xs select-none">│</span>
+                                <input @bind="newFoodPrep" type="text" placeholder="Préparation…"
+                                       class="flex-1 min-w-[80px] bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-400" />
+                            </div>
+                            @QuickFoodChips
+                        </div>
+                    }
+
+                    @if (showAddCompoForm)
+                    {
+                        <div class="mt-1.5 p-2 bg-amber-50/50 rounded-lg">
+                            <p class="text-[10px] font-medium text-amber-700 mb-1">Nom de la préparation</p>
+                            <div class="flex gap-1.5 items-center">
+                                <input @bind="newCompoName" @bind:event="oninput" @onkeyup="OnCompoKeyUp" type="text" placeholder="ex : Sandwich au thon, Salade composée…"
+                                       class="flex-1 min-w-0 bg-white rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 placeholder-gray-400" />
+                                <button @onclick="CreateComposition" disabled="@string.IsNullOrWhiteSpace(newCompoName)" aria-label="Créer la préparation"
+                                        class="bg-amber-500 hover:bg-amber-600 disabled:opacity-30 text-snow px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">→</button>
+                            </div>
+                            @if (QuickCompositions.Count > 0)
+                            {
+                                <!-- Préparations mémorisées (les plus utilisées) : re-proposées en un tap avec tous leurs aliments -->
+                                <p class="text-[9px] font-extrabold uppercase tracking-[.12em] text-amber-600/90 mt-2 mb-1">Vos préparations habituelles</p>
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach (var qc in QuickCompositions) { var c = qc;
+                                        <button type="button" @onclick="async () => await AddQuickComposition(c)"
+                                                title="@($"Ajouter {c.Name} — {string.Join(", ", c.Items.Select(i => i.FoodName))} (utilisée {c.UseCount}×)")"
+                                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[11px] font-medium hover:bg-amber-200 transition-colors">
+                                            🍽 @c.Name
+                                            <span class="font-normal text-amber-500">@c.Items.Count aliment@(c.Items.Count > 1 ? "s" : "")</span>
                                         </button>
                                     }
                                 </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @PhotosEditor
+            </div>
+
+            <!-- Hydratation -->
+            <div class="pt-1 border-t border-slate-50">
+                <div class="flex items-center gap-2 mb-1">
+                    <p class="text-[11px] font-medium text-gray-400 flex items-center gap-1"><Icon Name="droplet" Class="w-3 h-3" /> Hydratation</p>
+                    <div class="relative">
+                        <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
+                                aria-label="Ajouter une boisson"
+                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+                            + Ajouter <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
+                        </button>
+                        @if (openPanel == PanelDrinks)
+                        {
+                            <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                            <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(320px, calc(100vw - 4rem))">
+                                <div class="space-y-2 mb-2 max-h-72 overflow-y-auto pr-1">
+                                    @foreach (var grp in QuickDrinkGroups) { var g = grp;
+                                        <div>
+                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">@g.Group</p>
+                                            <div class="flex flex-wrap gap-1">
+                                                @foreach (var preset in g.Drinks) { var p = preset;
+                                                    <button @onclick="() => AddDrink(p)"
+                                                            class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap @DrinkChipClass(g.Group)">@p</button>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
                                 <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
-                                    <input @bind="customSportName" type="text" placeholder="Autre sport…"
-                                           class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-300 border-0" />
-                                    <button @onclick="async () => { await SelectCustomSport(); showSportPanel = false; }" disabled="@string.IsNullOrWhiteSpace(customSportName)"
-                                            class="px-2 py-1 rounded-lg text-[11px] bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-40 whitespace-nowrap">Choisir</button>
+                                    <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
+                                           class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 border-0" />
+                                    <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
+                                            class="px-2 py-1 rounded-lg text-[11px] bg-blue-500 hover:bg-blue-600 text-snow disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
                                 </div>
                             </div>
                         }
                     </div>
                 </div>
+                @if (drinks.Count > 0)
+                {
+                    <div class="flex flex-wrap gap-1">
+                        @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
+                            <span class="inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 text-[11px] pl-1 pr-2 py-0.5 rounded-full">
+                                <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">‹</button>
+                                <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">›</button>
+                                @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
+                            </span>
+                        }
+                    </div>
+                }
             </div>
 
-            <!-- Durée + Intensité -->
+            <!-- Activités pendant ce repas -->
+            @if (Event.MealSlot.HasValue)
+            {
+                <div class="pt-1 border-t border-slate-50">
+                    <p class="text-[11px] font-medium text-gray-400 mb-1.5">Activités pendant ce repas</p>
+                    @if (ConcurrentActivities.Count > 0)
+                    {
+                        <div class="space-y-1.5 mb-1.5">
+                            @foreach (var act in ConcurrentActivities) { var a = act;
+                                <div @key="a.Id">
+                                    <EventCard Event="a" ConcurrentActivities="@EmptyActivities" QuickFoods="@QuickFoods" OnChanged="OnChanged" OnDelete="DeleteConcurrent" />
+                                </div>
+                            }
+                        </div>
+                    }
+                    <button @onclick="AddConcurrentActivity"
+                            class="w-full text-emerald-600 hover:bg-emerald-50 rounded-xl py-1.5 text-xs font-semibold transition-colors">
+                        + Activité simultanée
+                    </button>
+                </div>
+            }
+        </div>
+
+        <!-- ── FIN du jalon : Rassasiement (slider) + Digestion ────────── -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
+
+            <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+                <span class="text-xs font-semibold text-emerald-800 flex-shrink-0">😌 Rassasiement</span>
+                <input type="range" min="0" max="10" step="1"
+                       value="@(satietyAfter ?? 0)"
+                       @oninput="PreviewSatiety" @onchange="CommitSatiety"
+                       aria-label="Rassasiement après le repas, de 0 à 10"
+                       class="flex-1 min-w-[90px] accent-carbon cursor-pointer" />
+                <span class="inline-flex items-center justify-center min-w-11 px-1.5 py-0.5 rounded-md text-xs font-bold tabular-nums
+                             @(satietyAfter.HasValue ? ScorePillClass(satietyAfter.Value) : "bg-gray-100 text-gray-400")">
+                    @(satietyAfter.HasValue ? $"{satietyAfter}/10" : "—")
+                </span>
+                @if (satietyAfter.HasValue)
+                {
+                    <button @onclick="() => SetSatiety(null)" aria-label="Effacer la note de rassasiement"
+                            class="text-gray-400 hover:text-gray-600 text-base leading-none p-1 -m-1 flex-shrink-0">×</button>
+                }
+            </div>
+
+            <div class="relative">
+                <button @onclick="() => TogglePanel(PanelSensations)" aria-haspopup="true" aria-expanded="@(openPanel == PanelSensations ? "true" : "false")"
+                        aria-label="Noter la digestion après le repas"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors @(string.IsNullOrEmpty(sensations) ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "bg-amber-100 text-amber-900")">
+                    🫁 Digestion
+                    <span class="@(string.IsNullOrEmpty(sensations) ? "font-normal text-amber-500" : "")">@SensationSummary</span>
+                </button>
+                @if (openPanel == PanelSensations)
+                {
+                    <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                    <div class="absolute right-0 bottom-full mb-0.5 z-30">
+                        <div class="bg-white rounded-xl shadow-lg p-2" style="width:min(270px, calc(100vw - 4rem))">
+                            <div class="flex flex-wrap gap-1.5">
+                                @foreach (var chip in PhysicalSensationChips) { var c = chip;
+                                    <button @onclick="() => ToggleSensationChip(c)"
+                                            class="px-2 py-1.5 rounded-lg text-xs border transition-colors @(SensationSelected(c) ? "bg-amber-100 border-amber-300 text-amber-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600")">
+                                        @(SensationSelected(c) ? "✓ " : "")@c
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+        </div>
+    }
+    else
+    {
+        <!-- ── Carte activité sportive ─────────────────────────────────── -->
+        <div class="py-2 space-y-3">
+
+            <div class="flex items-center gap-2">
+                <p class="text-[11px] font-medium text-gray-400 flex items-center gap-1"><Icon Name="dumbbell" Class="w-3 h-3" /> Type de sport</p>
+                <div class="relative">
+                    <button @onclick="() => TogglePanel(PanelSport)" aria-haspopup="true" aria-expanded="@(openPanel == PanelSport ? "true" : "false")"
+                            aria-label="Choisir le type de sport"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors">
+                        Choisir <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelSport ? "▲" : "▼")</span>
+                    </button>
+                    @if (openPanel == PanelSport)
+                    {
+                        <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                        <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(310px, calc(100vw - 4rem))">
+                            <div class="flex flex-wrap gap-1 max-h-36 overflow-y-auto mb-2">
+                                @foreach (var sport in SportPresets) { var sp = sport;
+                                    <button @onclick="async () => { await SelectSport(sp); openPanel = null; }"
+                                            class="px-2 py-1 rounded-lg text-[11px] border whitespace-nowrap transition-colors @(labelEdit == sp ? "bg-primary-100 border-primary-300 text-primary-700 font-medium" : "bg-white border-slate-100 text-gray-500 hover:bg-primary-50 hover:text-primary-600")">
+                                        @(labelEdit == sp ? "✓ " : "")@sp
+                                    </button>
+                                }
+                            </div>
+                            <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
+                                <input @bind="customSportName" type="text" placeholder="Autre sport…"
+                                       class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-300 border-0" />
+                                <button @onclick="async () => { await SelectCustomSport(); openPanel = null; }" disabled="@string.IsNullOrWhiteSpace(customSportName)"
+                                        class="px-2 py-1 rounded-lg text-[11px] bg-volt hover:bg-volt-dark text-carbon disabled:opacity-40 whitespace-nowrap">Choisir</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
             <div class="flex flex-wrap items-center gap-3">
                 <div class="flex items-center gap-1.5">
                     <label class="text-[11px] font-medium text-gray-400">Durée</label>
@@ -155,247 +691,144 @@
                 <div class="flex items-center gap-1.5">
                     <label class="text-[11px] font-medium text-gray-400">Intensité</label>
                     <div class="flex gap-1">
-                        @foreach (var opt in new[] { "Légère", "Modérée", "Intense" })
-                        {
-                            var o = opt;
+                        @foreach (var opt in new[] { "Légère", "Modérée", "Intense" }) { var o = opt;
                             <button @onclick="() => SetIntensity(o)"
-                                    class="px-2 py-1 rounded-lg text-[11px] font-medium border transition-colors @(intensity == o ? IntensityActive(o) : "border-slate-100 text-gray-400 hover:bg-slate-50")">@o</button>
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors @(intensity == o ? IntensityActive(o) : "bg-gray-100 text-gray-500 hover:bg-gray-200")">@o</button>
                         }
                     </div>
                 </div>
-            </div>
-        }
-
-        <!-- Hydratation — dropdown multi-choix -->
-        <div>
-            <div class="flex items-center gap-2 mb-1">
-                <p class="text-[11px] font-medium text-gray-400">💧 Hydratation</p>
-                <div class="relative">
-                    <button @onclick="() => showDrinkPanel = !showDrinkPanel"
-                            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] border border-blue-100 text-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                        + Ajouter <span class="text-[9px]">@(showDrinkPanel ? "▲" : "▼")</span>
-                    </button>
-                    @if (showDrinkPanel)
-                    {
-                        <div class="fixed inset-0 z-20" @onclick="() => showDrinkPanel = false"></div>
-                        <div class="absolute left-0 top-full mt-1 z-30 bg-white border border-slate-100 rounded-xl shadow-xl p-2" style="min-width:230px">
-                            <div class="flex flex-wrap gap-1 mb-2">
-                                @foreach (var preset in QuickDrinks)
-                                {
-                                    var p = preset;
-                                    <button @onclick="() => AddDrink(p)"
-                                            class="px-2 py-1 rounded-lg text-[11px] border border-blue-100 text-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-colors whitespace-nowrap">@p</button>
-                                }
-                            </div>
-                            <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
-                                <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
-                                       class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 border-0" />
-                                <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
-                                        class="px-2 py-1 rounded-lg text-[11px] bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
-                            </div>
-                        </div>
-                    }
+                <div class="flex items-center gap-1.5">
+                    <label class="text-[11px] font-medium text-gray-400">Dépense</label>
+                    <input type="number" min="0" step="10" @bind="caloriesBurned" @onblur="SaveActivityFields" placeholder="—"
+                           aria-label="Calories dépensées pendant l'activité"
+                           class="w-[70px] bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    <span class="text-[11px] text-gray-400">kcal</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <label class="text-[11px] font-medium text-gray-400">Distance</label>
+                    <input type="number" min="0" step="0.1" @bind="distanceKm" @onblur="SaveActivityFields" placeholder="—"
+                           aria-label="Distance parcourue en kilomètres"
+                           class="w-[64px] bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    <span class="text-[11px] text-gray-400">km</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <label class="text-[11px] font-medium text-gray-400">D+</label>
+                    <input type="number" min="0" step="10" @bind="elevationM" @onblur="SaveActivityFields" placeholder="—"
+                           aria-label="Dénivelé positif en mètres"
+                           class="w-[64px] bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    <span class="text-[11px] text-gray-400">m</span>
                 </div>
             </div>
-            @if (drinks.Count > 0)
-            {
-                <div class="flex flex-wrap gap-1">
-                    @foreach (var (dname, dcount, dentries) in DrinkGroups)
-                    {
-                        var lastId = dentries[^1].Id;
-                        var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
-                        <span class="inline-flex items-center gap-1 bg-blue-50 text-blue-600 text-[11px] px-2 py-0.5 rounded-full">
-                            @dlabel
-                            <button @onclick="() => DeleteDrink(lastId)" class="hover:text-red-400 ml-0.5 leading-none">×</button>
-                        </span>
-                    }
-                </div>
-            }
-        </div>
 
-        <!-- Aliments + Photos -->
-        <div>
-            <p class="text-[11px] font-medium text-gray-400 mb-1.5">Aliments</p>
+            @PhotosEditor
 
-            <!-- Items sans groupe -->
-            @if (UngroupedFoods.Any())
-            {
-                <div class="divide-y divide-slate-50 mb-1.5">
-                    @foreach (var food in UngroupedFoods)
-                    {
-                        var f = food;
-                        <div class="flex items-center gap-2 py-1">
-                            <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
-                            @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@f.Quantity</span> }
-                            @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
-                            <button @onclick="() => DeleteFood(f.Id)" class="text-gray-200 hover:text-red-400 transition-colors text-base leading-none flex-shrink-0">×</button>
-                        </div>
-                    }
-                </div>
-            }
-
-            <!-- Plats composés (groupes) -->
-            @foreach (var grp in GroupedFoods)
-            {
-                var gName = grp.Key;
-                <div class="border border-slate-100 rounded-lg overflow-hidden mb-1.5">
-                    <div class="flex items-center gap-2 px-2.5 py-1 bg-slate-50 border-b border-slate-100">
-                        <span class="text-[11px] font-semibold text-gray-500 flex-1">🍽 @gName</span>
-                        <button @onclick="() => DeleteGroup(gName)"
-                                class="text-gray-300 hover:text-red-400 text-[10px] transition-colors">× Supprimer</button>
-                    </div>
-                    <div class="divide-y divide-slate-50 px-2">
-                        @foreach (var food in grp.OrderBy(f => f.CreatedAt))
+            <div class="pt-1 border-t border-slate-50">
+                <div class="flex items-center gap-2 mb-1">
+                    <p class="text-[11px] font-medium text-gray-400 flex items-center gap-1"><Icon Name="droplet" Class="w-3 h-3" /> Hydratation</p>
+                    <div class="relative">
+                        <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
+                                aria-label="Ajouter une boisson"
+                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+                            + Ajouter <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
+                        </button>
+                        @if (openPanel == PanelDrinks)
                         {
-                            var f = food;
-                            <div class="flex items-center gap-2 py-1 pl-1">
-                                <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
-                                @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@f.Quantity</span> }
-                                @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
-                                <button @onclick="() => DeleteFood(f.Id)" class="text-gray-200 hover:text-red-400 transition-colors text-base leading-none flex-shrink-0">×</button>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-
-            <!-- Ajout aliment — 2 lignes compactes -->
-            <div class="mt-1">
-                <!-- Ligne principale : nom + bouton -->
-                <div class="flex gap-1.5 items-center">
-                    <input @bind="newFoodName" type="text" placeholder="Ajouter un aliment…"
-                           @onkeyup="OnFoodKeyUp"
-                           class="flex-1 min-w-0 bg-slate-50 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 placeholder-gray-300" />
-                    <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)"
-                            class="bg-primary-600 hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">+</button>
-                </div>
-                <!-- Ligne secondaire : détails optionnels -->
-                <div class="flex gap-1 items-center mt-1 flex-wrap">
-                    <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
-                           class="w-12 bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-300" />
-                    <select @bind="newFoodQtyUnit"
-                            class="bg-slate-50 rounded-md px-1 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[72px]">
-                        <option value="">u.</option>
-                        <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="ml">ml</option>
-                        <option value="cl">cl</option>
-                        <option value="L">L</option>
-                        <option value="pièce(s)">pc</option>
-                        <option value="tranche(s)">tr.</option>
-                        <option value="portion">port.</option>
-                        <option value="bol">bol</option>
-                        <option value="verre">verre</option>
-                        <option value="tasse">tasse</option>
-                        <option value="c. à café">c.c.</option>
-                        <option value="c. à soupe">c.s.</option>
-                        <option value="pincée">pincée</option>
-                    </select>
-                    <span class="text-slate-200 text-xs select-none">│</span>
-                    <input @bind="newFoodPrep" type="text" placeholder="Préparation…"
-                           class="flex-1 min-w-[80px] bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-300" />
-                    <span class="text-slate-200 text-xs select-none">│</span>
-                    <select @bind="newFoodGroup"
-                            class="bg-slate-50 rounded-md px-1 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[90px]">
-                        <option value="">Groupe…</option>
-                        @foreach (var g in ExistingGroups)
-                        {
-                            var gn = g;
-                            <option value="@gn">🍽 @gn</option>
-                        }
-                        <option value="__new__">+ Nouveau…</option>
-                    </select>
-                    @if (newFoodGroup == "__new__")
-                    {
-                        <input @bind="newFoodGroupName" type="text" placeholder="Nom du plat…"
-                               class="w-28 bg-slate-50 rounded-md px-1.5 py-1 text-[11px] text-gray-500 border-0 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-300" />
-                    }
-                </div>
-            </div>
-
-            <!-- Photos (dans la section Aliments) -->
-            @if (Event.EventType == DayEventType.Meal)
-            {
-                <div class="mt-2 pt-2 border-t border-slate-50">
-                    @if (photos.Count > 0)
-                    {
-                        <div class="flex flex-wrap gap-1.5 mb-1.5">
-                            @foreach (var photo in photos)
-                            {
-                                var ph = photo;
-                                <div class="relative">
-                                    <img src="@ph.FilePath" alt="Photo repas"
-                                         class="w-16 h-16 object-cover rounded-lg border border-slate-100 cursor-pointer hover:opacity-90 transition-opacity"
-                                         @onclick="() => lightboxUrl = ph.FilePath" />
-                                    <button @onclick="() => DeletePhoto(ph.Id)"
-                                            class="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center">×</button>
+                            <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                            <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(320px, calc(100vw - 4rem))">
+                                <div class="space-y-2 mb-2 max-h-72 overflow-y-auto pr-1">
+                                    @foreach (var grp in QuickDrinkGroups) { var g = grp;
+                                        <div>
+                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">@g.Group</p>
+                                            <div class="flex flex-wrap gap-1">
+                                                @foreach (var preset in g.Drinks) { var p = preset;
+                                                    <button @onclick="() => AddDrink(p)"
+                                                            class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap @DrinkChipClass(g.Group)">@p</button>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
                                 </div>
-                            }
-                        </div>
-                    }
-                    @if (lightboxUrl != null)
-                    {
-                        <div class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center cursor-zoom-out"
-                             @onclick="() => lightboxUrl = null">
-                            <img src="@lightboxUrl" class="max-w-[92vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" />
-                            <button class="absolute top-4 right-5 text-white text-3xl leading-none opacity-70 hover:opacity-100 transition-opacity"
-                                    @onclick="() => lightboxUrl = null">✕</button>
-                        </div>
-                    }
-                    @if (uploadError != null)
-                    {
-                        <p class="text-red-400 text-[11px] mb-1">@uploadError</p>
-                    }
-                    <label class="inline-flex items-center gap-1 cursor-pointer px-2.5 py-1 border border-dashed border-slate-200 hover:border-primary-300 rounded-lg text-[11px] text-gray-400 hover:text-primary-500 transition-colors">
-                        📷 Photo
-                        <InputFile OnChange="UploadPhoto" accept="image/*" class="hidden" />
-                    </label>
+                                <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
+                                    <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
+                                           class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 border-0" />
+                                    <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
+                                            class="px-2 py-1 rounded-lg text-[11px] bg-blue-500 hover:bg-blue-600 text-snow disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
                 </div>
-            }
-        </div>
+                @if (drinks.Count > 0)
+                {
+                    <div class="flex flex-wrap gap-1">
+                        @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
+                            <span class="inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 text-[11px] pl-1 pr-2 py-0.5 rounded-full">
+                                <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">‹</button>
+                                <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">›</button>
+                                @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
 
-        @if (Event.EventType == DayEventType.Meal)
-        {
-            <!-- Activités pendant ce repas -->
-            @if (Event.MealSlot.HasValue)
-            {
-                <div>
-                    <p class="text-[11px] font-medium text-gray-400 mb-1.5">Activités pendant ce repas</p>
-                    @if (ConcurrentActivities.Count > 0)
-                    {
-                        <div class="space-y-1.5 mb-1.5">
-                            @foreach (var act in ConcurrentActivities)
-                            {
-                                var a = act;
-                                <EventCard Event="a" ConcurrentActivities="@EmptyActivities"
-                                           OnChanged="OnChanged" OnDelete="DeleteConcurrent" />
-                            }
-                        </div>
-                    }
-                    <button @onclick="AddConcurrentActivity"
-                            class="w-full border border-dashed border-emerald-200 hover:border-emerald-400 text-emerald-400 hover:text-emerald-600 rounded-lg py-1 text-[11px] font-medium transition-colors">
-                        + Activité simultanée
-                    </button>
-                </div>
-            }
-        }
-        else
-        {
-            <!-- Notes (activité) -->
             <div>
                 <p class="text-[11px] font-medium text-gray-400 mb-1">Notes</p>
                 <textarea @bind="activityNotes" @onblur="SaveActivityFields" rows="2" placeholder="Parcours, ressenti, météo…"
-                          class="w-full bg-slate-50 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none placeholder-gray-300 border-0"></textarea>
+                          class="w-full bg-slate-50 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none placeholder-gray-400 border-0"></textarea>
             </div>
-        }
-    </div>
+        </div>
+    }
+}
 </div>
 
 @code {
     [Parameter, EditorRequired] public DayEvent Event { get; set; } = null!;
     [Parameter] public IReadOnlyList<DayEvent> ConcurrentActivities { get; set; } = [];
+    [Parameter] public IReadOnlyList<DiaryService.FrequentFood> QuickFoods { get; set; } = [];
+    [Parameter] public IReadOnlyList<DiaryService.FrequentComposition> QuickCompositions { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> FoodSuggestions { get; set; } = [];
+    [Parameter] public IReadOnlyList<CatalogFood> Catalog { get; set; } = [];
+
+    // ── Référentiel Ciqual : résolution et kcal centralisées dans DiaryService ──
+    CatalogFood? FindCatalogByName(string name) => DiaryService.FindCatalogFoodByName(name);
+
+    double? KcalOf(FoodEntry f) => DiaryService.EstimateKcal(f);
+
+    // Total du repas pour un constituant (somme des lignes estimables ; null si aucune).
+    double? MealNutrient(Func<CatalogFood, double?> per100)
+    {
+        double total = 0; var any = false;
+        foreach (var f in foods)
+            if (DiaryService.EstimateNutrient(f, per100) is double v) { total += v; any = true; }
+        return any ? total : null;
+    }
+
+    double? MealKcalTotal => MealNutrient(c => c.KcalPer100g);
+
+    // Choisir un aliment du référentiel pré-remplit l'unité naturelle et la portion typique.
+    void ApplyCatalogPick(CatalogFood c)
+    {
+        newFoodQtyUnit = c.DefaultUnit;
+        if (string.IsNullOrWhiteSpace(newFoodQtyVal) && c.TypicalQty is double q)
+            newFoodQtyVal = q % 1 == 0 ? ((int)q).ToString() : q.ToString("0.##", CultureInfo.InvariantCulture);
+    }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<int> OnDelete { get; set; }
+    [Parameter] public EventCallback OnCardDragStart { get; set; }
+    [Parameter] public EventCallback OnCardDragEnd { get; set; }
+    [Parameter] public bool IsEditing { get; set; }
+    [Parameter] public EventCallback OnToggleEdit { get; set; }
+
+    // Cartes imbriquées (activités simultanées) : édition gérée localement
+    bool selfEditing;
+    bool EditingActive => OnToggleEdit.HasDelegate ? IsEditing : selfEditing;
+
+    async Task HandleToggleEdit()
+    {
+        if (OnToggleEdit.HasDelegate) await OnToggleEdit.InvokeAsync();
+        else selfEditing = !selfEditing;
+    }
 
     static readonly IReadOnlyList<DayEvent> EmptyActivities = [];
 
@@ -415,12 +848,30 @@
         "Golf", "Équitation", "Danse", "Gym artistique",
     ];
 
-    static readonly string[] QuickDrinks =
+    // Boissons proposées, groupées par famille (libellé affiché en tête de groupe)
+    static readonly (string Group, string[] Drinks)[] QuickDrinkGroups =
     [
-        "Eau (1 verre)", "Eau (75cl)", "Eau (1,5L)", "Café expresso",
-        "Café allongé", "Thé (grande tasse)", "Eau gazeuse",
-        "Boisson isotonique", "Électrolytes", "Sirop", "Jus de fruit",
+        ("Eaux",              ["Eau (1 verre)", "Eau (75cl)", "Eau (1,5L)", "Eau gazeuse"]),
+        ("Cafés & chocolat",  ["Café expresso", "Café allongé", "Chocolat chaud"]),
+        ("Infusions",         ["Thé (grande tasse)", "Infusion", "Matcha"]),
+        ("Jus & sodas",       ["Jus de fruit", "Sirop", "Coca-Cola"]),
+        ("Fermentés",         ["Kéfir", "Kombucha"]),
+        ("Healthy",           ["Lait", "Smoothie", "Boisson isotonique", "Électrolytes"]),
+        ("Alcool",            ["Bière", "Vin rouge", "Vin rosé", "Vin blanc"]),
     ];
+
+    // Teinte des chips par famille — repère visuel rapide dans le panneau
+    static string DrinkChipClass(string group) => group switch
+    {
+        "Eaux"             => "bg-sky-50 text-sky-700 hover:bg-sky-100",
+        "Cafés & chocolat" => "bg-amber-50 text-amber-800 hover:bg-amber-100",
+        "Infusions"        => "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+        "Jus & sodas"      => "bg-orange-50 text-orange-700 hover:bg-orange-100",
+        "Fermentés"        => "bg-purple-50 text-purple-700 hover:bg-purple-100",
+        "Healthy"          => "bg-teal-50 text-teal-700 hover:bg-teal-100",
+        "Alcool"           => "bg-rose-50 text-rose-700 hover:bg-rose-100",
+        _                  => "bg-blue-50 text-blue-600 hover:bg-blue-100",
+    };
 
     static readonly string[] PhysicalSensationChips =
     [
@@ -434,17 +885,99 @@
         "Anxieux/se", "Stressé(e)", "Triste", "Coupable", "Frustré(e)",
     ];
 
-    // État local commun
+    // Propositions : aliments favoris du carnet, SOUS la zone de saisie (ajout en un tap)
+    RenderFragment? QuickFoodChips => QuickFoods.Count == 0 ? null : @<div class="mt-2">
+        <p class="text-[9px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1">Suggestions</p>
+        <div class="flex flex-wrap gap-1">
+            @foreach (var qf in QuickFoods) { var f = qf;
+                <button type="button" @onclick="async () => await AddQuickFood(f)"
+                        title="@($"Ajouter {f.FoodName} (utilisé {f.UseCount}×)")"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-50 text-primary-700 text-[11px] font-medium hover:bg-primary-100 transition-colors">
+                    <Icon Name="plus" Class="w-2.5 h-2.5" /><span>@f.FoodName</span>
+                    @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="text-primary-400">@f.Quantity @f.QuantityUnit</span> }
+                </button>
+            }
+        </div>
+    </div>;
+
+    // Photos : vignettes réorganisables + upload + lightbox — partagé repas/activités.
+    RenderFragment PhotosEditor => @<div class="mt-2 pt-2 border-t border-slate-50">
+        @if (photos.Count > 0)
+        {
+            <div class="flex flex-wrap gap-1.5 mb-1.5">
+                @foreach (var photo in photos) { var ph = photo;
+                    <div class="relative" @key="ph.Id">
+                        <button type="button" @onclick="() => lightboxUrl = ph.FilePath" aria-label="Agrandir la photo" class="block rounded-lg">
+                            <img src="@ph.FilePath" alt="Photo"
+                                 class="w-16 h-16 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity" />
+                        </button>
+                        <button @onclick="() => DeletePhoto(ph.Id)" aria-label="Supprimer la photo"
+                                class="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-snow rounded-full w-5 h-5 text-[11px] leading-none flex items-center justify-center">×</button>
+                        <button @onclick="async () => await MovePhoto(ph.Id, -1)" aria-label="Avancer la photo"
+                                class="absolute bottom-0.5 left-0.5 bg-black/50 hover:bg-black/75 text-snow rounded w-4 h-4 text-[10px] leading-none flex items-center justify-center">‹</button>
+                        <button @onclick="async () => await MovePhoto(ph.Id, 1)" aria-label="Reculer la photo"
+                                class="absolute bottom-0.5 right-0.5 bg-black/50 hover:bg-black/75 text-snow rounded w-4 h-4 text-[10px] leading-none flex items-center justify-center">›</button>
+                    </div>
+                }
+            </div>
+        }
+        @if (lightboxUrl != null)
+        {
+            <div class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center cursor-zoom-out"
+                 @onclick="() => lightboxUrl = null">
+                <img src="@lightboxUrl" class="max-w-[92vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" />
+                <button class="absolute top-4 right-5 text-snow text-3xl leading-none opacity-70 hover:opacity-100 transition-opacity p-2 -m-2"
+                        aria-label="Fermer l'aperçu de la photo"
+                        @onclick="() => lightboxUrl = null">✕</button>
+            </div>
+        }
+        @if (uploadError != null) { <p role="alert" class="text-red-500 text-[11px] mb-1">@uploadError</p> }
+        <label class="inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-full text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors">
+            <Icon Name="camera" Class="w-3.5 h-3.5" /> Photo
+            <InputFile OnChange="UploadPhoto" accept="image/*" multiple class="hidden" />
+        </label>
+    </div>;
+
+    // Options d'unité (partagé entre les formulaires)
+    static RenderFragment UnitOptions => @<text>
+        <option value="">u.</option>
+        <option value="g">g</option><option value="kg">kg</option>
+        <option value="ml">ml</option><option value="cl">cl</option><option value="L">L</option>
+        <option value="pièce(s)">pc</option><option value="tranche(s)">tr.</option>
+        <option value="poignée">poignée</option><option value="pot">pot</option>
+        <option value="portion">port.</option><option value="bol">bol</option>
+        <option value="verre">verre</option><option value="tasse">tasse</option>
+        <option value="c. à café">c.c.</option><option value="c. à soupe">c.s.</option>
+        <option value="pincée">pincée</option>
+    </text>;
+
+    // ── État local commun ────────────────────────────────────────────────────
     string labelEdit = "";
     string timeEdit = "";
     List<FoodEntry> foods = [];
     string newFoodName = "", newFoodQtyVal = "", newFoodQtyUnit = "g", newFoodPrep = "";
-    string newFoodGroup = "", newFoodGroupName = "";
+
+    bool showAddFoodForm;
+    bool showAddCompoForm;
+    string? addingToCompoName;
+    string? pendingCompoName;
+    string newCompoName = "";
+
     List<DrinkEntry> drinks = [];
     string customDrinkName = "";
-    bool showDrinkPanel;
 
-    // État local repas
+    // ── Panneaux contextuels (un seul ouvert à la fois) ─────────────────────
+    const string PanelEmotions = "emotions", PanelSensations = "sensations",
+                 PanelDrinks = "drinks", PanelSport = "sport";
+    string? openPanel;
+
+    // Confirmation en deux étapes avant la suppression du jalon
+    bool confirmingDelete;
+
+    // Message affiché lorsqu'une sauvegarde échoue
+    const string SaveErrorMessage = "Enregistrement impossible — vérifiez votre connexion.";
+
+    // ── État local repas ─────────────────────────────────────────────────────
     int? hungerBefore;
     int? satietyAfter;
     string? sensations;
@@ -453,25 +986,47 @@
     string? uploadError;
     string? lightboxUrl;
 
-    // État local activité
+    // ── État local activité ──────────────────────────────────────────────────
     int? durationMinutes;
     string? intensity;
+    int? caloriesBurned;
+    double? distanceKm;
+    int? elevationM;
     string? activityNotes;
     string customSportName = "";
-    bool showSportPanel;
 
-    // Propriétés calculées
+    // ── Édition inline d'aliments ────────────────────────────────────────────
+    int? editingFoodId;
+    string editFoodName  = "";
+    string editFoodQtyVal = "";
+    string editFoodUnit  = "";
+    string editFoodGroup = "";  // "" = aucune composition
+
+    // ── Drag & drop aliments (état non rendu → pas de re-render visuel) ──────
+    int pendingDragFoodId; // 0 = aucun
+
+    // ── Propriétés calculées ─────────────────────────────────────────────────
+    // `foods` est déjà trié (SortOrder) : Where/GroupBy préservent l'ordre,
+    // et les préparations apparaissent à la position de leur premier aliment.
     IEnumerable<FoodEntry> UngroupedFoods =>
         foods.Where(f => string.IsNullOrEmpty(f.GroupName));
     IEnumerable<IGrouping<string, FoodEntry>> GroupedFoods =>
-        foods.Where(f => !string.IsNullOrEmpty(f.GroupName))
-             .GroupBy(f => f.GroupName!).OrderBy(g => g.Key);
-    IEnumerable<string> ExistingGroups =>
-        foods.Where(f => !string.IsNullOrEmpty(f.GroupName))
-             .Select(f => f.GroupName!).Distinct().OrderBy(g => g);
+        foods.Where(f => !string.IsNullOrEmpty(f.GroupName)).GroupBy(f => f.GroupName!);
     IEnumerable<(string Name, int Count, List<DrinkEntry> Entries)> DrinkGroups =>
         drinks.GroupBy(d => d.DrinkName)
               .Select(g => (g.Key, g.Count(), g.OrderBy(d => d.CreatedAt).ToList()));
+
+    // Compositions proposées dans le sélecteur d'édition : groupes existants
+    // + groupe actuel de l'aliment édité (par sécurité s'il n'apparaît plus).
+    List<string> EditGroupOptions()
+    {
+        var names = GroupedFoods.Select(g => g.Key).ToList();
+        var current = foods.FirstOrDefault(f => f.Id == editingFoodId)?.GroupName;
+        if (!string.IsNullOrEmpty(current) && !names.Contains(current)) names.Add(current);
+        return names;
+    }
+
+    int IntensityTicks => intensity switch { "Légère" => 1, "Modérée" => 2, "Intense" => 3, _ => 0 };
 
     string SensationSummary => ChipSummary(sensations);
     string EmotionSummary   => ChipSummary(emotions);
@@ -479,12 +1034,16 @@
     static string ChipSummary(string? val)
     {
         var items = (val ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return items.Length switch
-        {
-            0 => "—",
-            1 => items[0],
-            _ => $"{items[0]} +{items.Length - 1}"
-        };
+        return items.Length switch { 0 => "—", 1 => items[0], _ => $"{items[0]} +{items.Length - 1}" };
+    }
+
+    static string FormatQty(FoodEntry f)
+    {
+        // Nouvelle donnée : qty + unit séparés
+        if (!string.IsNullOrEmpty(f.QuantityUnit))
+            return string.Join(" ", new[] { f.Quantity, f.QuantityUnit }.Where(s => !string.IsNullOrEmpty(s)));
+        // Ancienne donnée : qty stockée comme "150 g" ou "2 pièce(s)"
+        return f.Quantity ?? "";
     }
 
     protected override void OnParametersSet()
@@ -497,10 +1056,13 @@
         emotions = Event.Emotions;
         durationMinutes = Event.DurationMinutes;
         intensity = Event.Intensity;
+        caloriesBurned = Event.CaloriesBurned;
+        distanceKm = Event.DistanceKm;
+        elevationM = Event.ElevationM;
         activityNotes = Event.ActivityNotes;
-        foods = Event.FoodEntries.OrderBy(f => f.CreatedAt).ToList();
-        drinks = Event.DrinkEntries.OrderBy(d => d.CreatedAt).ToList();
-        photos = Event.Photos.OrderBy(p => p.CreatedAt).ToList();
+        foods = Event.FoodEntries.OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt).ThenBy(f => f.Id).ToList();
+        drinks = Event.DrinkEntries.OrderBy(d => d.SortOrder).ThenBy(d => d.CreatedAt).ThenBy(d => d.Id).ToList();
+        photos = Event.Photos.OrderBy(p => p.SortOrder).ThenBy(p => p.CreatedAt).ThenBy(p => p.Id).ToList();
     }
 
     // ── Sauvegardes ──────────────────────────────────────────────────────────
@@ -520,85 +1082,302 @@
 
     async Task SetHunger(int? score) { hungerBefore = score; await Save(); }
     async Task SetSatiety(int? score) { satietyAfter = score; await Save(); }
+
+    // Sliders : @oninput met à jour l'affichage pendant le glissement,
+    // @onchange (relâchement) persiste la valeur.
+    void PreviewHunger(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var v)) hungerBefore = v; }
+    async Task CommitHunger(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var v)) await SetHunger(v); }
+    void PreviewSatiety(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var v)) satietyAfter = v; }
+    async Task CommitSatiety(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var v)) await SetSatiety(v); }
     async Task SetIntensity(string opt) { intensity = intensity == opt ? null : opt; await Save(); }
     async Task SaveActivityFields() => await Save();
     async Task SelectSport(string sport) { labelEdit = sport; await Save(); }
     async Task SelectCustomSport() { if (!string.IsNullOrWhiteSpace(customSportName)) { labelEdit = customSportName.Trim(); customSportName = ""; await Save(); } }
 
+    // ── Panneaux contextuels (ouverture au clic, un seul à la fois) ──────────
+    void TogglePanel(string panel) => openPanel = openPanel == panel ? null : panel;
+    void ClosePanel() => openPanel = null;
+
     async Task Save()
     {
-        await DiaryService.UpdateEventAsync(Event.Id, labelEdit, ParseTime(timeEdit),
-            hungerBefore, satietyAfter, sensations, emotions,
-            durationMinutes, intensity, activityNotes);
-        Event.Label = labelEdit;
-        Event.Time = ParseTime(timeEdit);
-        Event.HungerBefore = hungerBefore;
-        Event.SatietyAfter = satietyAfter;
-        Event.Sensations = sensations;
-        Event.Emotions = emotions;
-        Event.DurationMinutes = durationMinutes;
-        Event.Intensity = intensity;
-        Event.ActivityNotes = activityNotes;
+        try
+        {
+            await DiaryService.UpdateEventAsync(Event.Id, labelEdit, ParseTime(timeEdit),
+                hungerBefore, satietyAfter, sensations, emotions,
+                durationMinutes, intensity, activityNotes, caloriesBurned, distanceKm, elevationM);
+            Event.Label = labelEdit; Event.Time = ParseTime(timeEdit);
+            Event.HungerBefore = hungerBefore; Event.SatietyAfter = satietyAfter;
+            Event.Sensations = sensations; Event.Emotions = emotions;
+            Event.DurationMinutes = durationMinutes; Event.Intensity = intensity; Event.ActivityNotes = activityNotes;
+            Event.CaloriesBurned = caloriesBurned; Event.DistanceKm = distanceKm; Event.ElevationM = elevationM;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
-    // ── Aliments ─────────────────────────────────────────────────────────────
+    // ── Handle de drag (jalon) ────────────────────────────────────────────────
+    async Task HandleCardDragStart() { if (OnCardDragStart.HasDelegate) await OnCardDragStart.InvokeAsync(); }
+    async Task HandleCardDragEnd()   { if (OnCardDragEnd.HasDelegate)   await OnCardDragEnd.InvokeAsync(); }
+
+    // ── Aliments — ajout ─────────────────────────────────────────────────────
 
     async Task AddFood()
     {
         if (string.IsNullOrWhiteSpace(newFoodName)) return;
-        var qtyParts = new[] { newFoodQtyVal.Trim(), newFoodQtyUnit.Trim() }.Where(s => !string.IsNullOrEmpty(s));
-        var qty = string.Join(" ", qtyParts);
-        var groupName = newFoodGroup == "__new__" ? newFoodGroupName.Trim()
-            : string.IsNullOrEmpty(newFoodGroup) ? null
-            : newFoodGroup;
-        var entry = await DiaryService.AddFoodEntryAsync(Event.Id, newFoodName.Trim(), qty, newFoodPrep.Trim(), groupName);
-        foods.Add(entry);
+        var groupName = addingToCompoName ?? pendingCompoName;
+        var qty = string.IsNullOrWhiteSpace(newFoodQtyVal) ? null : newFoodQtyVal.Trim();
+        try
+        {
+            var entry = await DiaryService.AddFoodEntryAsync(Event.Id, newFoodName.Trim(),
+                qty,
+                // Pas d'unité orpheline : l'unité n'est enregistrée qu'avec une quantité.
+                qty == null || string.IsNullOrWhiteSpace(newFoodQtyUnit) ? null : newFoodQtyUnit.Trim(),
+                string.IsNullOrWhiteSpace(newFoodPrep) ? null : newFoodPrep.Trim(),
+                groupName,
+                FindCatalogByName(newFoodName)?.Id);
+            foods.Add(entry);
+            Event.FoodEntries.Add(entry); // garde le graphe parent cohérent (OnParametersSet relit Event)
+            if (pendingCompoName != null) { addingToCompoName = pendingCompoName; pendingCompoName = null; }
+            newFoodName = newFoodQtyVal = newFoodPrep = "";
+            newFoodQtyUnit = "g";
+            // Le formulaire reste ouvert : saisie en chaîne (nom, Entrée, nom, Entrée…).
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    // Ajout en un tap d'un aliment favori (avec sa dernière quantité/préparation).
+    async Task AddQuickFood(DiaryService.FrequentFood f)
+    {
+        var groupName = addingToCompoName ?? pendingCompoName;
+        try
+        {
+            var entry = await DiaryService.AddFoodEntryAsync(Event.Id, f.FoodName,
+                f.Quantity, f.QuantityUnit, f.PreparationMethod, groupName,
+                FindCatalogByName(f.FoodName)?.Id);
+            foods.Add(entry);
+            Event.FoodEntries.Add(entry);
+            if (pendingCompoName != null) { addingToCompoName = pendingCompoName; pendingCompoName = null; }
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    // Ajout en un tap d'une composition favorite, avec toutes ses composantes.
+    async Task AddQuickComposition(DiaryService.FrequentComposition compo)
+    {
+        try
+        {
+            var entries = await DiaryService.AddCompositionAsync(Event.Id, compo.Name, compo.Items);
+            foods.AddRange(entries);
+            foreach (var entry in entries) Event.FoodEntries.Add(entry);
+            showAddCompoForm = false;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    void CreateComposition()
+    {
+        if (string.IsNullOrWhiteSpace(newCompoName)) return;
+        pendingCompoName = newCompoName.Trim();
+        newCompoName = "";
+        showAddCompoForm = false;
+        addingToCompoName = null;
+    }
+
+    void StartAddFoodToCompo(string compoName)
+    {
+        addingToCompoName = compoName;
+        showAddFoodForm = false;
+        showAddCompoForm = false;
+        pendingCompoName = null;
+        editingFoodId = null;
         newFoodName = newFoodQtyVal = newFoodPrep = "";
         newFoodQtyUnit = "g";
     }
 
+    void CancelAddCompo() { showAddCompoForm = false; pendingCompoName = null; newCompoName = ""; }
+    void OnCompoKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") CreateComposition(); }
+
     async Task DeleteFood(int id)
     {
-        await DiaryService.DeleteFoodEntryAsync(id);
-        foods.RemoveAll(f => f.Id == id);
+        try
+        {
+            await DiaryService.DeleteFoodEntryAsync(id);
+            foods.RemoveAll(f => f.Id == id);
+            if (Event.FoodEntries.FirstOrDefault(f => f.Id == id) is { } fe) Event.FoodEntries.Remove(fe);
+            if (editingFoodId == id) editingFoodId = null;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
     async Task DeleteGroup(string groupName)
     {
-        var toDelete = foods.Where(f => f.GroupName == groupName).ToList();
-        foreach (var food in toDelete)
+        try
         {
-            await DiaryService.DeleteFoodEntryAsync(food.Id);
-            foods.Remove(food);
+            var toDelete = foods.Where(f => f.GroupName == groupName).ToList();
+            foreach (var food in toDelete)
+            {
+                await DiaryService.DeleteFoodEntryAsync(food.Id);
+                foods.Remove(food);
+                Event.FoodEntries.Remove(food);
+            }
+            if (addingToCompoName == groupName) addingToCompoName = null;
+            Toast.ShowSaved();
         }
-        if (newFoodGroup == groupName) newFoodGroup = "";
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
-    void OnFoodKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") _ = AddFood(); }
+
+    // ── Aliments — édition inline ─────────────────────────────────────────────
+
+    void StartEditFood(FoodEntry f)
+    {
+        editingFoodId = f.Id;
+        editFoodName  = f.FoodName;
+        editFoodGroup = f.GroupName ?? "";
+        // Précharger la quantité et l'unité
+        if (!string.IsNullOrEmpty(f.QuantityUnit))
+        {
+            editFoodQtyVal = f.Quantity ?? "";
+            editFoodUnit   = f.QuantityUnit;
+        }
+        else
+        {
+            // ancienne donnée combinée "150 g" → séparer
+            var parts = (f.Quantity ?? "").Trim().Split(' ', 2);
+            editFoodQtyVal = parts.Length >= 1 ? parts[0] : "";
+            editFoodUnit   = parts.Length == 2 ? parts[1] : "";
+        }
+        addingToCompoName = null;
+        showAddFoodForm = false;
+        showAddCompoForm = false;
+    }
+
+    async Task SaveFoodEdit()
+    {
+        if (editingFoodId == null) return;
+        var food = foods.FirstOrDefault(f => f.Id == editingFoodId);
+        if (food == null) { editingFoodId = null; return; }
+        var name  = string.IsNullOrWhiteSpace(editFoodName) ? food.FoodName : editFoodName.Trim();
+        var qty   = string.IsNullOrWhiteSpace(editFoodQtyVal) ? null : editFoodQtyVal.Trim();
+        // Pas d'unité orpheline : l'unité n'est conservée qu'avec une quantité.
+        var unit  = qty == null || string.IsNullOrWhiteSpace(editFoodUnit) ? null : editFoodUnit.Trim();
+        var group = string.IsNullOrWhiteSpace(editFoodGroup)  ? null : editFoodGroup;
+        try
+        {
+            await DiaryService.UpdateFoodEntryAsync(food.Id, name, qty, unit, group);
+            food.FoodName = name;
+            food.Quantity = qty;
+            food.QuantityUnit = unit;
+            food.GroupName = group;
+            editingFoodId = null;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    void CancelFoodEdit() { editingFoodId = null; }
+
+    async Task OnEditFoodKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveFoodEdit();
+        else if (e.Key == "Escape") CancelFoodEdit();
+    }
+
+    // ── Aliments — drag & drop ────────────────────────────────────────────────
+    // pendingDragFoodId n'est pas utilisé dans le template → pas de re-render visuel
+    // → le DOM reste stable pendant le drag (le navigateur ne perd pas l'élément dragué)
+
+    void StartFoodDrag(int foodId) => pendingDragFoodId = foodId;
+    void EndFoodDrag() => pendingDragFoodId = 0;
+
+    // ── Réorganisation : flèches ↑↓/‹› ou dépôt d'un aliment sur un autre ──
+    async Task MoveFood(int foodId, int delta)
+    {
+        try { await DiaryService.MoveFoodEntryAsync(foodId, delta); await OnChanged.InvokeAsync(); }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    async Task DropFoodOnFood(int targetFoodId)
+    {
+        if (pendingDragFoodId == 0 || pendingDragFoodId == targetFoodId) { pendingDragFoodId = 0; return; }
+        var draggedId = pendingDragFoodId;
+        pendingDragFoodId = 0;
+        try { await DiaryService.MoveFoodBeforeAsync(draggedId, targetFoodId); await OnChanged.InvokeAsync(); }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    async Task MovePhoto(int photoId, int delta)
+    {
+        try { await DiaryService.MovePhotoAsync(photoId, delta); await OnChanged.InvokeAsync(); }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    async Task MoveDrinkGroup(string drinkName, int delta)
+    {
+        try { await DiaryService.MoveDrinkGroupAsync(Event.Id, drinkName, delta); await OnChanged.InvokeAsync(); }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
+
+    async Task DropFoodOnGroup(string? groupName)
+    {
+        if (pendingDragFoodId == 0) return;
+        var food = foods.FirstOrDefault(f => f.Id == pendingDragFoodId);
+        pendingDragFoodId = 0;
+        if (food == null || food.GroupName == groupName) return;
+        try
+        {
+            await DiaryService.UpdateFoodEntryAsync(food.Id, food.FoodName, food.Quantity, food.QuantityUnit, groupName);
+            food.GroupName = groupName;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
+    }
 
     // ── Hydratation ──────────────────────────────────────────────────────────
 
     async Task AddDrink(string name)
     {
-        var entry = await DiaryService.AddDrinkEntryAsync(Event.Id, name);
-        drinks.Add(entry);
+        try
+        {
+            var e = await DiaryService.AddDrinkEntryAsync(Event.Id, name);
+            drinks.Add(e);
+            Event.DrinkEntries.Add(e);
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
     async Task DeleteDrink(int id)
     {
-        await DiaryService.DeleteDrinkEntryAsync(id);
-        drinks.RemoveAll(d => d.Id == id);
+        try
+        {
+            await DiaryService.DeleteDrinkEntryAsync(id);
+            drinks.RemoveAll(d => d.Id == id);
+            if (Event.DrinkEntries.FirstOrDefault(d => d.Id == id) is { } de) Event.DrinkEntries.Remove(de);
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
     async Task AddCustomDrink()
     {
         if (string.IsNullOrWhiteSpace(customDrinkName)) return;
-        var entry = await DiaryService.AddDrinkEntryAsync(Event.Id, customDrinkName.Trim());
-        drinks.Add(entry);
-        customDrinkName = string.Empty;
+        try
+        {
+            var e = await DiaryService.AddDrinkEntryAsync(Event.Id, customDrinkName.Trim());
+            drinks.Add(e);
+            Event.DrinkEntries.Add(e);
+            customDrinkName = string.Empty;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
-    void OnDrinkKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") _ = AddCustomDrink(); }
+    async Task OnDrinkKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await AddCustomDrink(); }
 
     // ── Sensations / Émotions chips ──────────────────────────────────────────
 
@@ -620,7 +1399,6 @@
 
     bool SensationSelected(string chip) =>
         (sensations ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(chip);
-
     bool EmotionSelected(string chip) =>
         (emotions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(chip);
 
@@ -629,26 +1407,40 @@
     async Task UploadPhoto(InputFileChangeEventArgs e)
     {
         uploadError = null;
-        var file = e.File;
-        if (file == null) return;
+        if (e.FileCount > 10) { uploadError = "Maximum 10 photos à la fois."; return; }
         const long maxSize = 5L * 1024 * 1024;
-        if (file.Size > maxSize) { uploadError = "Photo trop volumineuse (max 5 Mo)."; return; }
-        try
+        var errors = new List<string>();
+        var uploadFailed = false;
+        foreach (var file in e.GetMultipleFiles(10))
         {
-            await using var stream = file.OpenReadStream(maxSize);
-            var photo = await DiaryService.AddPhotoAsync(Event.Id, stream, file.Name);
-            photos.Add(photo);
+            if (file.Size > maxSize) { errors.Add($"{file.Name} : photo trop volumineuse (max 5 Mo)."); continue; }
+            try
+            {
+                await using var stream = file.OpenReadStream(maxSize);
+                var photo = await DiaryService.AddPhotoAsync(Event.Id, stream, file.Name);
+                photos.Add(photo);
+                Event.Photos.Add(photo);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{file.Name} : erreur lors de l'envoi ({ex.Message}).");
+                uploadFailed = true;
+            }
         }
-        catch (Exception ex)
-        {
-            uploadError = $"Erreur lors de l'envoi : {ex.Message}";
-        }
+        if (errors.Count > 0) uploadError = string.Join(" ", errors);
+        if (uploadFailed) Toast.ShowError(SaveErrorMessage);
     }
 
     async Task DeletePhoto(int photoId)
     {
-        await DiaryService.DeletePhotoAsync(photoId);
-        photos.RemoveAll(p => p.Id == photoId);
+        try
+        {
+            await DiaryService.DeletePhotoAsync(photoId);
+            photos.RemoveAll(p => p.Id == photoId);
+            if (Event.Photos.FirstOrDefault(p => p.Id == photoId) is { } pe) Event.Photos.Remove(pe);
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveErrorMessage); }
     }
 
     // ── Activités simultanées ────────────────────────────────────────────────
@@ -659,12 +1451,7 @@
         await OnChanged.InvokeAsync();
     }
 
-    async Task DeleteConcurrent(int actId)
-    {
-        await DiaryService.DeleteEventAsync(actId);
-        await OnChanged.InvokeAsync();
-    }
-
+    async Task DeleteConcurrent(int actId) { await DiaryService.DeleteEventAsync(actId); await OnChanged.InvokeAsync(); }
     async Task Delete() => await OnDelete.InvokeAsync(Event.Id);
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -674,28 +1461,17 @@
 
     static string ScorePillClass(int s) => s switch
     {
-        0     => "bg-gray-50 border-gray-200 text-gray-500",
-        <= 3  => "bg-green-50 border-green-200 text-green-700",
-        <= 6  => "bg-amber-50 border-amber-200 text-amber-700",
-        _     => "bg-red-50 border-red-200 text-red-600"
+        0    => "bg-gray-100 text-gray-600",
+        <= 3 => "bg-green-100 text-green-700",
+        <= 6 => "bg-amber-100 text-amber-700",
+        _    => "bg-red-100 text-red-600"
     };
-
-    static string ScoreClass(int score, int? selected) =>
-        selected == score
-            ? score == 0    ? "bg-gray-400 text-white"
-              : score <= 3  ? "bg-green-500 text-white"
-              : score <= 6  ? "bg-amber-400 text-white"
-              : "bg-red-500 text-white"
-            : score == 0    ? "bg-gray-50 text-gray-500 hover:bg-gray-100"
-              : score <= 3  ? "bg-green-50 text-green-600 hover:bg-green-100"
-              : score <= 6  ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
-              : "bg-red-50 text-red-500 hover:bg-red-100";
 
     static string IntensityActive(string s) => s switch
     {
-        "Légère"  => "bg-green-100 text-green-700 border-green-300",
-        "Modérée" => "bg-amber-100 text-amber-700 border-amber-300",
-        "Intense" => "bg-red-100 text-red-700 border-red-300",
-        _         => "bg-gray-100 text-gray-700 border-gray-300"
+        "Légère"  => "bg-green-100 text-green-700",
+        "Modérée" => "bg-amber-100 text-amber-700",
+        "Intense" => "bg-red-100 text-red-700",
+        _         => "bg-gray-100 text-gray-700"
     };
 }

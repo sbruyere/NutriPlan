@@ -16,4 +16,9 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Référentiel Ciqual embarqué pour le seed au premier démarrage -->
+    <Content Update="Data\Seed\food-catalog.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

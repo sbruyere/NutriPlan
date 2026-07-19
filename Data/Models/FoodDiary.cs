@@ -21,6 +21,15 @@ public class FoodDiary
 
     public bool IsNutritionistManaged { get; set; }
 
+    // ── Profil (facultatif) : métabolisme de base Mifflin-St Jeor + objectifs ──
+    [MaxLength(1)] public string? Sex { get; set; }            // "F" / "M"
+    public int? HeightCm { get; set; }
+    public double? WeightKg { get; set; }
+    public int? BirthYear { get; set; }
+    [MaxLength(30)] public string? ActivityLevel { get; set; } // clé DiaryService.ActivityLevels
+    public int? DailyKcalTarget { get; set; }                  // plafond d'apport journalier (kcal)
+    public int? DailyBurnTarget { get; set; }                  // objectif de dépense sportive (kcal)
+
     public int? NutritionistId { get; set; }
     public Nutritionist? Nutritionist { get; set; }
 

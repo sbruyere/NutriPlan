@@ -12,10 +12,10 @@
         </a>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div class="bg-white rounded-2xl shadow-sm p-6">
         <div class="text-center mb-6">
             <div class="text-4xl mb-2">👨‍⚕️</div>
-            <h1 class="text-2xl font-bold text-gray-800">Espace nutritionniste</h1>
+            <h1 class="font-display text-2xl font-semibold text-gray-800">Espace nutritionniste</h1>
         </div>
 
         @if (!showRegister)
@@ -23,23 +23,27 @@
             <!-- Formulaire connexion -->
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Email</label>
-                    <input @bind="email" type="email" placeholder="votre@email.com"
+                    <label for="login-email" class="block text-sm font-medium text-gray-600 mb-1.5">Email</label>
+                    <input id="login-email" @bind="email" type="email" placeholder="votre@email.com"
                            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Mot de passe</label>
-                    <input @bind="password" @onkeyup="OnLoginKeyUp" type="password" placeholder="••••••••"
+                    <label for="login-password" class="block text-sm font-medium text-gray-600 mb-1.5">Mot de passe</label>
+                    <input id="login-password" @bind="password" @onkeyup="OnLoginKeyUp" type="password" placeholder="••••••••"
                            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
 
+                @if (!string.IsNullOrEmpty(regSuccess))
+                {
+                    <div role="status" class="bg-green-50 text-green-700 text-sm rounded-xl px-4 py-3">@regSuccess</div>
+                }
                 @if (!string.IsNullOrEmpty(loginError))
                 {
-                    <div class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@loginError</div>
+                    <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@loginError</div>
                 }
 
                 <button @onclick="DoLogin" disabled="@isLoading"
-                        class="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white py-3 rounded-xl font-medium transition-colors">
+                        class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-xl font-medium transition-colors">
                     @(isLoading ? "Connexion…" : "Se connecter")
                 </button>
 
@@ -56,37 +60,37 @@
             <!-- Formulaire inscription -->
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Nom complet</label>
-                    <input @bind="regName" type="text" placeholder="Dr. Marie Dupont"
+                    <label for="reg-name" class="block text-sm font-medium text-gray-600 mb-1.5">Nom complet</label>
+                    <input id="reg-name" @bind="regName" type="text" placeholder="Dr. Marie Dupont"
                            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Email professionnel</label>
-                    <input @bind="regEmail" type="email" placeholder="votre@email.com"
+                    <label for="reg-email" class="block text-sm font-medium text-gray-600 mb-1.5">Email professionnel</label>
+                    <input id="reg-email" @bind="regEmail" type="email" placeholder="votre@email.com"
                            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Mot de passe</label>
-                    <input @bind="regPassword" type="password" placeholder="Minimum 8 caractères"
+                    <label for="reg-password" class="block text-sm font-medium text-gray-600 mb-1.5">Mot de passe</label>
+                    <input id="reg-password" @bind="regPassword" type="password" placeholder="Minimum 8 caractères"
                            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Confirmer le mot de passe</label>
-                    <input @bind="regPasswordConfirm" type="password" placeholder="••••••••"
+                    <label for="reg-password-confirm" class="block text-sm font-medium text-gray-600 mb-1.5">Confirmer le mot de passe</label>
+                    <input id="reg-password-confirm" @bind="regPasswordConfirm" type="password" placeholder="••••••••"
                            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
 
                 @if (!string.IsNullOrEmpty(regError))
                 {
-                    <div class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@regError</div>
+                    <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@regError</div>
                 }
                 @if (!string.IsNullOrEmpty(regSuccess))
                 {
-                    <div class="bg-green-50 text-green-700 text-sm rounded-xl px-4 py-3">@regSuccess</div>
+                    <div role="status" class="bg-green-50 text-green-700 text-sm rounded-xl px-4 py-3">@regSuccess</div>
                 }
 
                 <button @onclick="Register" disabled="@isLoading"
-                        class="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white py-3 rounded-xl font-medium transition-colors">
+                        class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-xl font-medium transition-colors">
                     @(isLoading ? "Inscription…" : "Créer mon compte")
                 </button>
 
@@ -107,8 +111,10 @@
     string loginError = "", regError = "", regSuccess = "";
     bool isLoading, showRegister;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Recharge la session persistée avant toute lecture de l'état de connexion.
+        await Session.EnsureLoadedAsync();
         if (Session.IsNutritionistLoggedIn)
             Nav.NavigateTo("/nutritionniste/tableau-de-bord");
     }
@@ -116,6 +122,7 @@
     async Task DoLogin()
     {
         loginError = "";
+        regSuccess = "";
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
             loginError = "Veuillez remplir tous les champs.";
@@ -129,8 +136,7 @@
             loginError = "Email ou mot de passe incorrect.";
             return;
         }
-        Session.LoginNutritionist(nutritionist.Id, nutritionist.Name);
-        Session.NotifyStateChanged();
+        await Session.LoginNutritionistAsync(nutritionist.Id, nutritionist.Name);
         Nav.NavigateTo("/nutritionniste/tableau-de-bord");
     }
 
@@ -166,8 +172,8 @@
         email = regEmail;
     }
 
-    void OnLoginKeyUp(KeyboardEventArgs e)
+    async Task OnLoginKeyUp(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") _ = DoLogin();
+        if (e.Key == "Enter") await DoLogin();
     }
 }

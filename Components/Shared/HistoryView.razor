@@ -6,7 +6,7 @@
 }
 else if (logs.Count == 0)
 {
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+    <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-8 text-center">
         <div class="text-4xl mb-3">📅</div>
         <p class="text-gray-400">Aucune entrée dans votre historique pour le moment.</p>
     </div>
@@ -21,12 +21,14 @@ else
             var foodCount = log.Events.SelectMany(e => e.FoodEntries).Count();
             var allFoods = log.Events.SelectMany(e => e.FoodEntries).ToList();
 
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden cursor-pointer hover:border-primary-200 transition-colors"
-                 @onclick="() => OnDateSelected.InvokeAsync(log.Date)">
+            <button type="button"
+                    class="w-full text-left bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] overflow-hidden cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 transition-colors"
+                    aria-label="@($"Ouvrir la journée du {log.Date.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))}")"
+                    @onclick="() => OnDateSelected.InvokeAsync(log.Date)">
                 <div class="px-4 py-3 flex items-center justify-between">
                     <div>
-                        <p class="font-medium text-gray-800 capitalize">
-                            @log.Date.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                        <p class="font-display font-bold text-carbon">
+                            <span class="capitalize">@log.Date.ToString("dddd", new System.Globalization.CultureInfo("fr-FR"))</span> @log.Date.ToString("d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
                         </p>
                         <p class="text-xs text-gray-400 mt-0.5">
                             @foodCount aliment(s)
@@ -61,7 +63,7 @@ else
                         }
                     </div>
                 }
-            </div>
+            </button>
         }
     </div>
 }

@@ -9,3 +9,5 @@ obj/
 run.log
 run.err.log
 wwwroot/uploads/
+node_modules/
+.claude/settings.local.json

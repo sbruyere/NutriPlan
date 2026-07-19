@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NutriPlan — maquettes v2 : moderne, sharp, contrasté</title>
+<link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+<link href="https://fonts.bunny.net/css?family=archivo:500,600,700,800|space-grotesk:400,500,600,700|sora:400,500,600,700,800|work-sans:400,500,600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Work Sans", system-ui, sans-serif; background: #ffffff; color: #1a212b; padding: 32px 20px 64px; }
+  .intro { max-width: 1220px; margin: 0 auto 28px; }
+  .intro h1 { font-family: "Space Grotesk", sans-serif; font-size: 27px; font-weight: 700; letter-spacing: -0.02em; }
+  .intro p { color: #5b6674; font-size: 14px; margin-top: 6px; max-width: 780px; line-height: 1.55; }
+  .grid { max-width: 1220px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; align-items: start; }
+  .option-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .option-head .badge { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 14px; width: 30px; height: 26px; border-radius: 7px;
+                        display: inline-flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; transform: translateY(3px); }
+  .badge.b1 { background: #101315; color: #C6F52C; }
+  .badge.b2 { background: linear-gradient(120deg, #059669, #06b6d4); }
+  .badge.b3 { background: linear-gradient(120deg, #10b981, #f59e0b); }
+  .option-head h2 { font-family: "Space Grotesk", sans-serif; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .option > p { color: #5b6674; font-size: 12.5px; margin: 2px 0 14px 40px; line-height: 1.5; }
+  .notes { margin: 14px 0 0 40px; padding: 0; list-style: none; color: #5b6674; font-size: 12.5px; line-height: 1.6; }
+  .notes li::before { content: "· "; color: #94a1af; }
+  .phone { width: 100%; max-width: 375px; margin: 0 auto; border-radius: 28px; overflow: hidden;
+           box-shadow: 0 2px 6px rgb(15 25 20 / .08), 0 24px 60px -24px rgb(15 25 20 / .38);
+           border: 1px solid rgb(0 0 0 / .07); }
+  .screen { padding: 18px 16px 22px; min-height: 660px; }
+  .cta { max-width: 1220px; margin: 36px auto 0; background: #10171f; color: #dfe7ee; border-radius: 16px; padding: 20px 24px; font-size: 14px; line-height: 1.6; }
+  .cta b { color: #fff; }
+
+/* ═══ V1 — VOLT — Plaque de salle ═══ */
+.v1 .screen{background:#E9EDF1;font-family:'Archivo',sans-serif;color:#14181C}
+.v1 .hd{display:flex;align-items:center;justify-content:space-between;margin:2px 0 14px}
+.v1 .hd h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.15;color:#0E1114}
+.v1 .hd-chip{background:#0E1114;color:#C6F52C;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;padding:5px 8px;border-radius:4px}
+.v1 .stats{background:#101315;border-radius:10px;padding:14px 14px 13px;margin-bottom:16px;box-shadow:0 14px 24px -14px rgba(8,12,16,.55)}
+.v1 .stats-top{display:flex;align-items:center;gap:6px;margin-bottom:11px}
+.v1 .stats-dot{display:block;width:6px;height:6px;background:#C6F52C}
+.v1 .stats-k{font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#7E8890}
+.v1 .stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.v1 .stat-v{display:block;font-size:23px;font-weight:800;line-height:1;color:#C6F52C;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.v1 .stat-v em{font-style:normal;font-size:11px;font-weight:800;color:#EDF2F6;margin-left:2px;letter-spacing:.02em}
+.v1 .stat-l{display:block;margin-top:6px;font-size:8.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#79838C}
+.v1 .stats-bar{display:flex;gap:3px;margin-top:12px}
+.v1 .stats-bar i{display:block;flex:1;height:4px;border-radius:2px;background:#23282D}
+.v1 .stats-bar i.on{background:#C6F52C}
+.v1 .tl{position:relative;display:flex;flex-direction:column;gap:10px}
+.v1 .tl::before{content:"";position:absolute;left:53px;top:18px;bottom:16px;width:2px;background:#CBD3DA}
+.v1 .row{display:grid;grid-template-columns:40px 12px 1fr;column-gap:8px}
+.v1 .t{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#2A3138;text-align:right;padding-top:13px;font-variant-numeric:tabular-nums}
+.v1 .row.off .t{color:#9AA4AD}
+.v1 .rail{position:relative;display:block}
+.v1 .mk{position:absolute;left:50%;top:15px;width:8px;height:8px;background:#C6F52C;transform:translateX(-50%) rotate(45deg);box-shadow:0 0 0 3px #E9EDF1}
+.v1 .mk.off{background:#AEB8C0}
+.v1 .mk.dark{background:#101315}
+.v1 .card{background:#FFFFFF;border-radius:8px;padding:11px 12px 12px;box-shadow:0 1px 0 rgba(20,26,31,.06),0 10px 18px -12px rgba(20,26,31,.35)}
+.v1 .card-hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.v1 .card-hd h2{margin:0;font-size:13.5px;font-weight:800;letter-spacing:-.01em;color:#101418}
+.v1 .edit{font-size:11px;color:#B6BEC6}
+.v1 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.v1 .chip{display:inline-flex;align-items:center;gap:5px;background:#EFF3F6;border-radius:5px;padding:4px 7px;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A545E}
+.v1 .chip b{font-weight:800;color:#101418}
+.v1 .meter{display:inline-block;width:22px;height:4px;border-radius:2px;background:#D6DDE3;overflow:hidden}
+.v1 .meter i{display:block;height:100%;background:#101315}
+.v1 .meter .f5{width:50%}
+.v1 .meter .f7{width:70%}
+.v1 .foods{margin:0 0 9px;font-size:11.5px;font-weight:600;line-height:1.45;color:#4A545E}
+.v1 .photo{height:84px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:27px;background:linear-gradient(120deg,#9FDC46,#F2BB3B 55%,#EE7A3A)}
+.v1 .dish{margin:0;font-size:12.5px;font-weight:700;color:#1A2027}
+.v1 .sub{margin:3px 0 0;font-size:11px;font-weight:600;color:#5A646E}
+.v1 .card.act{background:#101315;box-shadow:0 14px 22px -14px rgba(8,12,16,.6)}
+.v1 .act-tag{display:block;margin-bottom:5px;font-size:8.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#C6F52C}
+.v1 .act .card-hd{margin-bottom:5px}
+.v1 .act .card-hd h2{color:#F4F7FA}
+.v1 .act .edit{color:#4A525A}
+.v1 .act-meta{display:flex;align-items:center;gap:7px}
+.v1 .act-min{font-size:12px;font-weight:800;letter-spacing:.02em;color:#C6F52C;font-variant-numeric:tabular-nums}
+.v1 .act-sep{color:#4A525A;font-weight:700}
+.v1 .act-lvl{font-size:11px;font-weight:600;color:#97A1AA}
+.v1 .ticks{display:inline-flex;gap:3px;margin-left:auto}
+.v1 .ticks i{display:block;width:4px;height:11px;border-radius:1px;background:#2A3036;transform:skewX(-14deg)}
+.v1 .ticks i.on{background:#C6F52C}
+.v1 .slot{display:flex;align-items:center;justify-content:space-between;border-radius:8px;padding:8px 9px 8px 12px;background:repeating-linear-gradient(135deg,#DDE3E9 0 7px,#E4E9EE 7px 14px)}
+.v1 .slot-l{font-size:12px;font-weight:700;color:#69737D}
+.v1 .add{background:#C6F52C;color:#0E1114;border-radius:5px;padding:6px 9px;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 2px 0 rgba(14,17,20,.18)}
+/* ═══ V2 — Volt Émeraude ═══ */
+.v2 .screen{background:#e9eff6;font-family:"Space Grotesk","Work Sans",sans-serif;color:#0c2036;-webkit-font-smoothing:antialiased}
+.v2 .top{margin:0 0 14px}
+.v2 .eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.8px;color:#0785ad;margin:0 0 4px}
+.v2 .date-row{display:flex;align-items:center;justify-content:space-between}
+.v2 .date{margin:0;font-size:20px;font-weight:700;letter-spacing:-.4px;line-height:1.15}
+.v2 .today{background:#0d2440;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:4px 8px;border-radius:6px;box-shadow:0 4px 10px -3px rgba(12,32,54,.4)}
+.v2 .hero{display:flex;justify-content:space-between;align-items:flex-end;padding:16px 16px 13px;border-radius:12px;margin:0 0 18px;background:radial-gradient(130% 160% at 100% -10%,rgba(255,255,255,.22),transparent 42%),linear-gradient(115deg,#00b268 0%,#00b4c0 70%,#19cdea 100%);box-shadow:0 14px 26px -12px rgba(0,160,180,.55),0 3px 6px -2px rgba(12,32,54,.18)}
+.v2 .num{font-size:25px;font-weight:700;letter-spacing:-.8px;line-height:1;color:#fff}
+.v2 .num .unit{font-size:13px;font-weight:700;letter-spacing:0;opacity:.85;margin-left:2px}
+.v2 .lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.1px;color:rgba(255,255,255,.85);margin-top:4px}
+.v2 .tl{position:relative}
+.v2 .rail{position:absolute;left:55.5px;top:18px;bottom:24px;width:3px;border-radius:2px;background:linear-gradient(180deg,#00b268 0%,#00b4c0 55%,#19cdea 100%)}
+.v2 .row{display:grid;grid-template-columns:40px 14px 1fr;column-gap:10px;align-items:start;position:relative}
+.v2 .row + .row{margin-top:12px}
+.v2 .time{padding-top:14px;font-size:11px;font-weight:700;letter-spacing:.2px;text-align:right;color:#0c2036}
+.v2 .time.mut{color:#8ba0b3;font-weight:600}
+.v2 .dot{width:14px;height:14px;border-radius:50%;margin-top:14px}
+.v2 .dot.done{background:linear-gradient(135deg,#00b268,#19cdea);box-shadow:0 0 0 3px #e9eff6,0 3px 7px rgba(0,160,170,.5)}
+.v2 .dot.empty{background:#e9eff6;box-shadow:inset 0 0 0 2.5px #9db3c6,0 0 0 3px #e9eff6}
+.v2 .dot.run{background:#0d2440;box-shadow:0 0 0 3px #e9eff6,0 3px 7px rgba(12,36,64,.45)}
+.v2 .card{background:#fff;border-radius:10px;padding:12px;box-shadow:0 2px 3px rgba(12,32,54,.07),0 12px 22px -10px rgba(12,32,54,.28)}
+.v2 .head{display:flex;align-items:baseline;justify-content:space-between}
+.v2 .head h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.2px;line-height:1.3}
+.v2 .edit{font-size:11px;color:#b3c2cf}
+.v2 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.v2 .chip{font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;line-height:1.4}
+.v2 .chip.em{background:#d5f6e6;color:#048257}
+.v2 .chip.cy{background:#d2f2fa;color:#077ba4}
+.v2 .chip.am{background:#ffeccb;color:#a3620a}
+.v2 .dish{margin:8px 0 2px;font-size:13px;font-weight:700;letter-spacing:-.1px}
+.v2 .foods{margin:7px 0 0;font-size:12px;line-height:1.45;color:#5d7185}
+.v2 .card .dish + .foods{margin-top:0}
+.v2 .photo{height:84px;margin-top:10px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:30px;background:linear-gradient(120deg,#ffe28f 0%,#ffa15d 48%,#7bd45e 100%);box-shadow:inset 0 0 26px rgba(255,255,255,.28)}
+.v2 .card.sport{background:#0d2440;box-shadow:0 12px 22px -10px rgba(0,170,210,.5),0 2px 3px rgba(12,32,54,.15)}
+.v2 .card.sport h2{color:#fff}
+.v2 .card.sport .edit{color:rgba(255,255,255,.4)}
+.v2 .sport-meta{margin:4px 0 0;font-size:12px;font-weight:700;letter-spacing:.3px;color:#46e2ff}
+.v2 .slot{display:flex;align-items:center;justify-content:space-between;background:#dde9f2;border-radius:10px;padding:12px 14px;box-shadow:inset 0 2px 4px rgba(12,32,54,.07)}
+.v2 .slot-name{font-size:12px;font-weight:600;color:#64798d}
+.v2 .add{font-size:12px;font-weight:700;color:#0785ad}
+/* ═══ V3 — Color Blocks Vitaminé ═══ */
+.v3 .screen{background:#FFFFFF;color:#0F1613;font-family:'Sora',sans-serif;display:flex;flex-direction:column;}
+.v3 .top{margin:2px 0 16px;}
+.v3 .eyebrow{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(15,22,19,.45);margin:0 0 6px;}
+.v3 .date-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.v3 .date-row h1{font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:0;}
+.v3 .today{background:#0F1613;color:#35E69C;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:5px 9px;border-radius:4px;white-space:nowrap;}
+.v3 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 18px;}
+.v3 .stat{border-radius:10px;padding:11px 12px 13px;display:flex;flex-direction:column;gap:3px;}
+.v3 .s-green{background:#35E69C;}
+.v3 .s-cyan{background:#38CBFF;}
+.v3 .s-orange{background:#FF8A1E;}
+.v3 .stat-k{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;opacity:.66;}
+.v3 .stat-v{font-size:27px;font-weight:800;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
+.v3 .stat-v small{font-size:12px;font-weight:800;opacity:.6;margin-left:2px;letter-spacing:0;}
+.v3 .tl{position:relative;display:flex;flex-direction:column;gap:10px;}
+.v3 .tl::before{content:"";position:absolute;left:21px;top:12px;bottom:16px;width:4px;background:#0F1613;border-radius:2px;}
+.v3 .row{display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:start;}
+.v3 .hour{position:relative;z-index:1;display:block;background:#0F1613;color:#fff;font-size:10px;font-weight:800;text-align:center;padding:5px 0;border-radius:6px;margin-top:9px;letter-spacing:.03em;font-variant-numeric:tabular-nums;}
+.v3 .h-meal{color:#35E69C;}
+.v3 .h-sport{color:#38CBFF;}
+.v3 .h-off{color:rgba(255,255,255,.55);}
+.v3 .block{border-radius:12px;padding:13px 14px 14px;}
+.v3 .meal{background:#35E69C;}
+.v3 .sport{background:#38CBFF;}
+.v3 .b-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.v3 .b-head h3{font-size:13px;font-weight:800;letter-spacing:-.01em;line-height:1.2;margin:0;}
+.v3 .edit{font-size:11px;opacity:.4;line-height:1;}
+.v3 .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
+.v3 .tag{background:rgba(15,22,19,.14);border-radius:4px;font-size:9.5px;font-weight:700;padding:4px 7px;line-height:1;}
+.v3 .foods{font-size:11px;font-weight:600;line-height:1.45;margin:9px 0 0;color:rgba(15,22,19,.82);}
+.v3 .dish{font-size:12.5px;font-weight:800;margin:8px 0 0;}
+.v3 .dish + .foods{margin-top:3px;}
+.v3 .photo{margin-top:10px;height:86px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:30px;background:radial-gradient(130% 130% at 18% 0%,rgba(255,255,255,.38),rgba(255,255,255,0) 48%),linear-gradient(135deg,#FFDF6B 0%,#FFA53D 55%,#FF6B3D 100%);}
+.v3 .empty{background:#E9EDEA;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 12px 12px 14px;}
+.v3 .empty-t{font-size:12.5px;font-weight:700;margin:0;color:rgba(15,22,19,.88);}
+.v3 .add{background:#0F1613;color:#fff;font-size:10px;font-weight:800;padding:7px 11px;border-radius:6px;white-space:nowrap;}
+.v3 .add b{color:#35E69C;font-weight:800;margin-right:3px;}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <h1>NutriPlan — trois pistes « moderne · sharp · contrasté · vif »</h1>
+  <p>Même écran, mêmes données. Les trois respectent ton brief : peu de bordures, des sections nettement visibles par le
+     <b>contraste</b> (blocs, aplats, élévation), des couleurs vives modernes, une timeline. La bascule lecture/édition
+     déjà validée est conservée quelle que soit la piste.</p>
+</header>
+
+<main class="grid">
+  <section class="option">
+    <div class="option-head"><span class="badge b1">V1</span><h2>VOLT — Plaque de salle</h2></div>
+    <p>Une journée lue comme un tableau d&#x27;entraînement : blocs charbon tranchants, chiffres volt saturés, sections plaquées sur fond gris froid — zéro bordure, tout au contraste.</p>
+    <div class="phone v1"><div class="screen">
+<header class="hd">
+  <h1>Mercredi 15 juillet</h1>
+  <span class="hd-chip">Aujourd'hui</span>
+</header>
+
+<section class="stats">
+  <div class="stats-top"><i class="stats-dot"></i><span class="stats-k">Bilan du jour</span></div>
+  <div class="stats-grid">
+    <div class="stat"><span class="stat-v">2<em>/6</em></span><span class="stat-l">Repas</span></div>
+    <div class="stat"><span class="stat-v">0,7<em>L</em></span><span class="stat-l">Hydratation</span></div>
+    <div class="stat"><span class="stat-v">45<em>min</em></span><span class="stat-l">Activité</span></div>
+  </div>
+  <div class="stats-bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div>
+</section>
+
+<section class="tl">
+  <div class="row">
+    <span class="t">08:00</span>
+    <span class="rail"><i class="mk"></i></span>
+    <article class="card">
+      <div class="card-hd"><h2>Petit-déjeuner</h2><span class="edit">✎</span></div>
+      <div class="chips">
+        <span class="chip">Faim <b>5/10</b><span class="meter"><i class="f5"></i></span></span>
+        <span class="chip">Rassasié <b>7/10</b><span class="meter"><i class="f7"></i></span></span>
+        <span class="chip">Kombucha</span>
+      </div>
+      <p class="foods">Riz complet 150 g · Kéfir · Banane</p>
+      <div class="photo">🥗</div>
+    </article>
+  </div>
+
+  <div class="row off">
+    <span class="t">10:00</span>
+    <span class="rail"><i class="mk off"></i></span>
+    <div class="slot"><span class="slot-l">Collation matin</span><span class="add">+ Ajouter</span></div>
+  </div>
+
+  <div class="row">
+    <span class="t">12:30</span>
+    <span class="rail"><i class="mk"></i></span>
+    <article class="card">
+      <div class="card-hd"><h2>Déjeuner</h2><span class="edit">✎</span></div>
+      <p class="dish">Salade composée</p>
+      <p class="sub">Tomates cerises 100 g · Thon 80 g</p>
+    </article>
+  </div>
+
+  <div class="row">
+    <span class="t">17:30</span>
+    <span class="rail"><i class="mk dark"></i></span>
+    <article class="card act">
+      <span class="act-tag">Activité</span>
+      <div class="card-hd"><h2>Course à pied</h2><span class="edit">✎</span></div>
+      <div class="act-meta">
+        <span class="act-min">45 min</span><span class="act-sep">·</span><span class="act-lvl">Modérée</span>
+        <span class="ticks"><i class="on"></i><i class="on"></i><i></i></span>
+      </div>
+    </article>
+  </div>
+
+  <div class="row off">
+    <span class="t">19:30</span>
+    <span class="rail"><i class="mk off"></i></span>
+    <div class="slot"><span class="slot-l">Dîner</span><span class="add">+ Ajouter</span></div>
+  </div>
+</section>
+    </div></div>
+    <ul class="notes">
+      <li>Contraste sans bordures : plaque charbon #101315 pour les stats et l&#x27;activité (chiffres volt #C6F52C), cartes blanches à ombre courte sur fond gris froid #E9EDF1, créneaux vides en hachures diagonales façon marquage au sol de salle — trois niveaux de sections immédiatement lisibles.</li>
+      <li>Timeline signature : rail vertical continu 2px, heures en Archivo 800 tabulaires, marqueurs losanges (volt = rempli, gris = vide, noir = sport) détourés du rail par un anneau couleur de fond ; l&#x27;accent volt est réservé aux données fortes, aux marqueurs et aux actions + Ajouter (pastille volt, texte noir).</li>
+      <li>Micro-données pour la densité sans surcharge : jauge 6 segments (2 volt allumés = Repas 2/6) sous les stats, mini-mètres Faim/Rassasié dans les chips du petit-déjeuner, ticks d&#x27;intensité inclinés (2/3) pour la course — tout en Archivo, rayons 4-10px, aucun contrôle d&#x27;édition hormis le ✎ discret.</li>
+    </ul>
+  </section>
+  <section class="option">
+    <div class="option-head"><span class="badge b2">V2</span><h2>Volt Émeraude</h2></div>
+    <p>Une journée qui flotte sur un courant émeraude-cyan : cartes en lévitation nette, stats en aplat électrique, zéro bordure — que du relief et du voltage.</p>
+    <div class="phone v2"><div class="screen">
+<header class="top">
+  <p class="eyebrow">Journal du jour</p>
+  <div class="date-row">
+    <h1 class="date">Mercredi 15 juillet</h1>
+    <span class="today">Aujourd'hui</span>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="stat">
+    <div class="num">2<span class="unit">/6</span></div>
+    <div class="lbl">Repas</div>
+  </div>
+  <div class="stat">
+    <div class="num">0,7<span class="unit">L</span></div>
+    <div class="lbl">Hydratation</div>
+  </div>
+  <div class="stat">
+    <div class="num">45<span class="unit">min</span></div>
+    <div class="lbl">Activité</div>
+  </div>
+</section>
+
+<section class="tl">
+  <div class="rail"></div>
+
+  <div class="row">
+    <div class="time">08:00</div>
+    <div class="dot done"></div>
+    <article class="card">
+      <div class="head"><h2>Petit-déjeuner</h2><span class="edit">✎</span></div>
+      <div class="chips">
+        <span class="chip em">Faim 5/10</span>
+        <span class="chip cy">Rassasié 7/10</span>
+        <span class="chip am">Kombucha</span>
+      </div>
+      <p class="foods">Riz complet 150 g · Kéfir · Banane</p>
+      <div class="photo">🥗</div>
+    </article>
+  </div>
+
+  <div class="row">
+    <div class="time mut">10:00</div>
+    <div class="dot empty"></div>
+    <div class="slot">
+      <span class="slot-name">Collation matin</span>
+      <span class="add">+ Ajouter</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="time">12:30</div>
+    <div class="dot done"></div>
+    <article class="card">
+      <div class="head"><h2>Déjeuner</h2><span class="edit">✎</span></div>
+      <p class="dish">Salade composée</p>
+      <p class="foods">Tomates cerises 100 g · Thon 80 g</p>
+    </article>
+  </div>
+
+  <div class="row">
+    <div class="time">17:30</div>
+    <div class="dot run"></div>
+    <article class="card sport">
+      <div class="head"><h2>🏃 Course à pied</h2><span class="edit">✎</span></div>
+      <p class="sport-meta">45 min · Modérée</p>
+    </article>
+  </div>
+
+  <div class="row">
+    <div class="time mut">19:30</div>
+    <div class="dot empty"></div>
+    <div class="slot">
+      <span class="slot-name">Dîner</span>
+      <span class="add">+ Ajouter</span>
+    </div>
+  </div>
+</section>
+    </div></div>
+    <ul class="notes">
+      <li>Le relief remplace la bordure et encode l&#x27;état : cartes remplies blanches en lévitation franche (double ombre courte + portée), slots vides en creux (fond bleu-gris + ombre interne), activité en bloc navy à halo cyan — trois niveaux de contraste immédiatement lisibles sur le fond gris-bleu.</li>
+      <li>Signature : le héro stats en dégradé émeraude→cyan saturé avec reflet radial et gros chiffres blancs Space Grotesk (unités réduites /6, L, min), dont le voltage se propage au rail de timeline (même dégradé vertical) et aux points sertis d&#x27;un anneau découpé dans le fond.</li>
+      <li>Rayons tenus à 6-12px, chips vives (émeraude, cyan, ambre pour le Kombucha), photo simulée en dégradé appétissant chaud→vert avec 🥗 ; hauteur totale ~610px, densité équilibrée sans un seul trait de bordure.</li>
+    </ul>
+  </section>
+  <section class="option">
+    <div class="option-head"><span class="badge b3">V3</span><h2>Color Blocks Vitaminé</h2></div>
+    <p>La couleur fait la loi : chaque moment de la journée est un aplat vitaminé, net et joyeux — aucune bordure, que du contraste.</p>
+    <div class="phone v3"><div class="screen">
+<header class="top">
+  <p class="eyebrow">Journal du jour</p>
+  <div class="date-row">
+    <h1>Mercredi 15 juillet</h1>
+    <span class="today">Aujourd'hui</span>
+  </div>
+</header>
+
+<section class="stats">
+  <div class="stat s-green"><span class="stat-k">Repas</span><span class="stat-v">2<small>/6</small></span></div>
+  <div class="stat s-cyan"><span class="stat-k">Hydratation</span><span class="stat-v">0,7<small>L</small></span></div>
+  <div class="stat s-orange"><span class="stat-k">Activité</span><span class="stat-v">45<small>min</small></span></div>
+</section>
+
+<section class="tl">
+  <div class="row">
+    <span class="hour h-meal">08:00</span>
+    <article class="block meal">
+      <div class="b-head"><h3>Petit-déjeuner</h3><span class="edit">✎</span></div>
+      <div class="tags"><span class="tag">Faim 5/10</span><span class="tag">Rassasié 7/10</span><span class="tag">Kombucha</span></div>
+      <p class="foods">Riz complet 150 g · Kéfir · Banane</p>
+      <div class="photo">🥗</div>
+    </article>
+  </div>
+  <div class="row">
+    <span class="hour h-off">10:00</span>
+    <article class="empty"><p class="empty-t">Collation matin</p><span class="add"><b>+</b>Ajouter</span></article>
+  </div>
+  <div class="row">
+    <span class="hour h-meal">12:30</span>
+    <article class="block meal">
+      <div class="b-head"><h3>Déjeuner</h3><span class="edit">✎</span></div>
+      <p class="dish">Salade composée</p>
+      <p class="foods">Tomates cerises 100 g · Thon 80 g</p>
+    </article>
+  </div>
+  <div class="row">
+    <span class="hour h-sport">17:30</span>
+    <article class="block sport">
+      <div class="b-head"><h3>Course à pied</h3><span class="edit">✎</span></div>
+      <div class="tags"><span class="tag">45 min</span><span class="tag">Modérée</span></div>
+    </article>
+  </div>
+  <div class="row">
+    <span class="hour h-off">19:30</span>
+    <article class="empty"><p class="empty-t">Dîner</p><span class="add"><b>+</b>Ajouter</span></article>
+  </div>
+</section>
+    </div></div>
+    <ul class="notes">
+      <li>La couleur EST la structure : menthe #35E69C = repas rempli, cyan #38CBFF = sport, gris franc #E9EDEA = jalon vide avec CTA encre « + Ajouter » ; zéro bordure, la séparation vient des aplats sur fond blanc et des radius 4-12px.</li>
+      <li>Timeline foncée continue : rail encre 4px reliant des pastilles d&#x27;heures noires dont la COULEUR DU TEXTE code le type du jalon (menthe/cyan/gris) — la frise sert de légende du système chromatique.</li>
+      <li>Moment signature : trois tuiles stats vert/cyan/orange avec chiffres Sora 800 en 27px, unités minorées et micro-labels capitales ; Sora 600-800 partout, chips ton-sur-ton rgba encre 14% pour Faim/Rassasié/Kombucha, photo en dégradé chaud (jaune→orange) avec 🥗 centré.</li>
+    </ul>
+  </section>
+</main>
+
+<div class="cta">
+  <b>Comment choisir :</b> réponds « V1 », « V2 » ou « V3 » — ou panache précisément (« V2 avec le bloc stats noir de V1 »…).
+  J'applique ensuite la piste validée à toute l'application, sans rien changer d'autre sans ton accord.
+</div>
+
+</body>
+</html>

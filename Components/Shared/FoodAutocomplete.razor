@@ -1,0 +1,175 @@
+@using System.Text
+@using System.Globalization
+
+@* Champ de saisie d'aliment avec autocomplétion visible : d'abord les aliments
+   déjà saisis dans le carnet (habitudes), puis le référentiel Ciqual (~3 500
+   aliments génériques, ANSES) avec kcal. Filtre insensible aux accents,
+   navigation clavier (↑ ↓ Entrée Échap), sélection au mousedown (pas de blur).
+   Choisir une entrée du référentiel déclenche OnPickCatalog (pré-remplissage
+   de l'unité naturelle et de la portion typique par l'appelant). *@
+<div class="relative flex-1 min-w-0">
+    <input value="@Value"
+           @oninput="HandleInput"
+           @onfocus="HandleFocus"
+           @onblur="HandleBlur"
+           @onkeydown="HandleKeyDown"
+           type="text" placeholder="@Placeholder" autocomplete="off" spellcheck="false"
+           role="combobox" aria-expanded="@(open && filtered.Count > 0 ? "true" : "false")"
+           aria-label="@Placeholder"
+           class="@CssClass" />
+    @if (open && filtered.Count > 0)
+    {
+        <div class="absolute left-0 right-0 top-full mt-1 z-40 bg-white rounded-lg shadow-lg overflow-hidden" role="listbox">
+            @for (int i = 0; i < filtered.Count; i++)
+            {
+                var idx = i;
+                var item = filtered[i];
+                <button type="button" role="option" aria-selected="@(idx == highlighted ? "true" : "false")"
+                        @onmousedown:preventDefault="true"
+                        @onmousedown="async () => await Pick(item)"
+                        class="w-full text-left px-2.5 py-1.5 text-sm transition-colors flex items-baseline gap-2
+                               @(idx == highlighted ? "bg-primary-50 text-primary-800" : "text-gray-700 hover:bg-slate-50")">
+                    <span class="truncate">@item.Label</span>
+                    @if (item.Hint != null)
+                    {
+                        <span class="ml-auto flex-shrink-0 text-[10px] text-gray-400">@item.Hint</span>
+                    }
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
+    [Parameter] public IReadOnlyList<CatalogFood> Catalog { get; set; } = [];
+    [Parameter] public EventCallback<CatalogFood> OnPickCatalog { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Nom de l'aliment…";
+    [Parameter] public string CssClass { get; set; } = "";
+    [Parameter] public EventCallback OnEnter { get; set; }
+    [Parameter] public EventCallback OnFocusIn { get; set; }
+    [Parameter] public EventCallback OnBlurOut { get; set; }
+
+    const int MaxHistory = 3;
+    const int MaxTotal = 8;
+
+    record Item(string Label, string? Hint, CatalogFood? Cat);
+
+    bool open;
+    int highlighted = -1;
+    List<Item> filtered = [];
+
+    // Minuscules sans diacritiques — « creme » trouve « Crème fraîche ».
+    static string Fold(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        foreach (var c in s.Normalize(NormalizationForm.FormD))
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                sb.Append(char.ToLowerInvariant(c));
+        return sb.ToString();
+    }
+
+    static string? CatalogHint(CatalogFood c) =>
+        c.KcalPer100g is double k ? $"{k:0} kcal/100 g" : null;
+
+    void Refilter()
+    {
+        var q = Fold(Value ?? "").Trim();
+        // Recherche multi-mots : « poulet rot » trouve « Poulet, viande rôtie » —
+        // chaque mot doit apparaître quelque part dans le nom plié.
+        var tokens = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        bool Matches(string folded) => tokens.All(folded.Contains);
+
+        var items = new List<Item>();
+        var taken = new HashSet<string>();
+
+        // 1. Habitudes du carnet (préfixe du 1er mot d'abord, puis le reste)
+        IEnumerable<string> history = tokens.Length == 0
+            ? Suggestions
+            : Suggestions.Where(s => Fold(s).StartsWith(tokens[0]) && Matches(Fold(s)))
+                .Concat(Suggestions.Where(s => { var f = Fold(s); return !f.StartsWith(tokens[0]) && Matches(f); }));
+        foreach (var s in history)
+        {
+            if (Fold(s) == q || !taken.Add(Fold(s))) continue;
+            items.Add(new Item(s, null, null));
+            if (items.Count >= MaxHistory) break;
+        }
+
+        // 2. Référentiel Ciqual (à partir de 2 caractères)
+        if (q.Length >= 2)
+        {
+            var starts = Catalog.Where(c => c.SearchName.StartsWith(tokens[0]) && Matches(c.SearchName));
+            var contains = Catalog.Where(c => !c.SearchName.StartsWith(tokens[0]) && Matches(c.SearchName));
+            foreach (var c in starts.Concat(contains))
+            {
+                if (items.Count >= MaxTotal) break;
+                if (!taken.Add(c.SearchName)) continue;
+                items.Add(new Item(c.Name, CatalogHint(c), c));
+            }
+        }
+
+        filtered = items;
+        highlighted = -1;
+    }
+
+    async Task HandleInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString() ?? "";
+        await ValueChanged.InvokeAsync(Value);
+        open = true;
+        Refilter();
+    }
+
+    async Task HandleFocus()
+    {
+        await OnFocusIn.InvokeAsync();
+        open = true;
+        Refilter();
+    }
+
+    async Task HandleBlur()
+    {
+        // Le clic sur une suggestion passe par mousedown+preventDefault : pas de blur.
+        open = false;
+        await OnBlurOut.InvokeAsync();
+    }
+
+    async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                if (open && filtered.Count > 0) highlighted = (highlighted + 1) % filtered.Count;
+                break;
+            case "ArrowUp":
+                if (open && filtered.Count > 0) highlighted = (highlighted <= 0 ? filtered.Count : highlighted) - 1;
+                break;
+            case "Escape":
+                open = false;
+                break;
+            case "Enter":
+                if (open && highlighted >= 0 && highlighted < filtered.Count)
+                {
+                    await Pick(filtered[highlighted]);
+                }
+                else
+                {
+                    open = false;
+                    await OnEnter.InvokeAsync();
+                }
+                break;
+        }
+    }
+
+    async Task Pick(Item item)
+    {
+        Value = item.Label;
+        await ValueChanged.InvokeAsync(item.Label);
+        if (item.Cat != null)
+            await OnPickCatalog.InvokeAsync(item.Cat);
+        open = false;
+        highlighted = -1;
+    }
+}

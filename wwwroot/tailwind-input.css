@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@source "../Components/**/*.razor";
+@source "../wwwroot/**/*.html";
+
+@layer base {
+  /* Focus clavier visible sur tous les éléments interactifs */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-primary-400);
+    outline-offset: 1px;
+  }
+
+  @media print {
+    body { background: white !important; }
+  }
+}
+
+@theme {
+  /* ═══ Thème « VOLT — plaque de salle » (maquette V1 validée) :
+     gris froid, blocs charbon tranchants, accent lime volt, Archivo 800.
+     Sections séparées par le CONTRASTE (aplats, ombres courtes), zéro bordure. ═══ */
+
+  /* ── Typographie : Archivo (display) + Work Sans (texte) ── */
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Lime (teintes claires pour chips/fonds, 600+ lisible en texte) ── */
+  --color-primary-50:  #f7fee7;
+  --color-primary-100: #ecfccb;
+  --color-primary-200: #d9f99d;
+  --color-primary-300: #bef264;
+  --color-primary-400: #a3e635;
+  --color-primary-500: #84cc16;
+  --color-primary-600: #4d7c0f;
+  --color-primary-700: #3f6212;
+  --color-primary-800: #365314;
+  --color-primary-900: #1a2e05;
+
+  /* ── Accent orange (conservé pour compositions/ambre existant) ── */
+  --color-accent-50:  #fff7ed;
+  --color-accent-100: #ffedd5;
+  --color-accent-200: #fed7aa;
+  --color-accent-300: #fdba74;
+  --color-accent-400: #fb923c;
+  --color-accent-500: #f97316;
+  --color-accent-600: #ea580c;
+  --color-accent-700: #c2410c;
+  --color-accent-800: #9a3412;
+  --color-accent-900: #7c2d12;
+
+  /* ── Matières VOLT ── */
+  --color-canvas:   #e9edf1;  /* fond gris froid */
+  --color-paper:    #ffffff;
+  --color-snow:     #ffffff;
+  --color-volt:     #c6f52c;  /* accent lime — marqueurs, chiffres, actions */
+  --color-volt-dark:#b3e224;
+  --color-carbon:   #101315;  /* blocs sombres */
+  --color-carbon-2: #23282d;
+
+  /* ── Rayons courts « sharp » ── */
+  --radius-lg:  0.5rem;
+  --radius-xl:  0.625rem;
+  --radius-2xl: 0.75rem;
+}

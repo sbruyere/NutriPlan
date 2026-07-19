@@ -12,10 +12,12 @@ public class NutriPlanContext(DbContextOptions<NutriPlanContext> options) : DbCo
     public DbSet<FoodEntry> FoodEntries => Set<FoodEntry>();
     public DbSet<DrinkEntry> DrinkEntries => Set<DrinkEntry>();
     public DbSet<MealPhoto> MealPhotos => Set<MealPhoto>();
+    public DbSet<CatalogFood> CatalogFoods => Set<CatalogFood>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<FoodDiary>().HasIndex(d => d.AccessCode).IsUnique();
+        modelBuilder.Entity<CatalogFood>().HasIndex(c => c.SearchName);
         modelBuilder.Entity<DailyLog>().HasIndex(l => new { l.FoodDiaryId, l.Date }).IsUnique();
         modelBuilder.Entity<Nutritionist>().HasIndex(n => n.Email).IsUnique();
 

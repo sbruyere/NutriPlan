@@ -37,4 +37,15 @@ public class NutritionistService(IDbContextFactory<NutriPlanContext> factory)
         await using var ctx = await factory.CreateDbContextAsync();
         return await ctx.Nutritionists.FindAsync(id);
     }
+
+    public async Task<List<Nutritionist>> SearchAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2) return [];
+        await using var ctx = await factory.CreateDbContextAsync();
+        var q = query.Trim().ToLowerInvariant();
+        return await ctx.Nutritionists
+            .Where(n => n.Name.ToLower().Contains(q) || n.Email.ToLower().Contains(q))
+            .Take(5)
+            .ToListAsync();
+    }
 }

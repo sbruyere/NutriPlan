@@ -1,16 +1,21 @@
 @page "/carnet/{AccessCode}/journal"
 @inject DiaryService DiaryService
 @inject DiarySessionService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject NutritionistService NutritionistService
+@inject BrowserTimeService Time
+@inject ToastService Toast
 
 <PageTitle>Mon carnet — NutriPlan</PageTitle>
 
 @if (diary == null && !isLoading)
 {
     <div class="max-w-sm mx-auto py-8">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 text-center">
+        <div class="bg-white rounded-xl shadow-sm p-5 text-center">
             <div class="text-3xl mb-2">🔍</div>
-            <h2 class="text-base font-semibold text-gray-700 mb-3">Carnet introuvable</h2>
-            <a href="/" class="inline-block bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+            <h2 class="font-display text-lg font-semibold text-gray-800 mb-3">Carnet introuvable</h2>
+            <a href="/" class="inline-block bg-volt text-carbon px-4 py-2 rounded-lg text-sm font-medium hover:bg-volt-dark transition-colors">
                 Retour à l'accueil
             </a>
         </div>
@@ -23,23 +28,26 @@ else if (isLoading)
 else if (showPinForm)
 {
     <div class="max-w-sm mx-auto py-8">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+        <div class="bg-white rounded-xl shadow-sm p-5">
             <div class="text-center mb-4">
                 <div class="text-3xl mb-1.5">🔒</div>
-                <h2 class="text-base font-bold text-gray-800">Carnet protégé</h2>
+                <h2 class="font-display text-lg font-semibold text-gray-800">Carnet protégé</h2>
                 <p class="text-gray-400 text-xs mt-1">Saisissez votre code PIN pour accéder à votre carnet.</p>
             </div>
             <div class="space-y-3">
-                <input @bind="pinInput" @bind:event="oninput" @onkeyup="OnPinKeyUp"
-                       type="password" placeholder="Code PIN"
-                       class="w-full bg-slate-50 rounded-lg px-4 py-2 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-300 border-0"
-                       maxlength="8" />
+                <div>
+                    <label for="pin-unlock" class="block text-xs font-medium text-gray-500 mb-1">Code PIN</label>
+                    <input id="pin-unlock" @bind="pinInput" @bind:event="oninput" @onkeyup="OnPinKeyUp"
+                           type="password" inputmode="numeric" placeholder="Code PIN"
+                           class="w-full bg-slate-50 rounded-lg px-4 py-2 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-300 border-0"
+                           maxlength="8" />
+                </div>
                 @if (pinError)
                 {
-                    <p class="text-red-500 text-xs text-center">Code PIN incorrect.</p>
+                    <p class="text-red-500 text-xs text-center" role="alert">Code PIN incorrect.</p>
                 }
                 <button @onclick="ValidatePin"
-                        class="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+                        class="w-full bg-volt hover:bg-volt-dark text-carbon py-2 rounded-lg text-sm font-medium transition-colors">
                     Accéder à mon carnet
                 </button>
             </div>
@@ -49,29 +57,308 @@ else if (showPinForm)
 else
 {
     <div class="space-y-3">
+
+        <!-- ── Bannière premier accès ──────────────────────────────────── -->
+        @if (showNewBanner)
+        {
+            <div class="bg-carbon text-snow rounded-lg px-3 py-2.5 flex items-center gap-2.5 print:hidden">
+                <div class="flex-1 min-w-0">
+                    <p class="text-[10px] font-medium opacity-70 leading-tight">Carnet créé !</p>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-mono font-bold text-sm tracking-widest text-volt">@AccessCode</span>
+                        <span class="text-[10px] opacity-60">— notez ce code, c'est votre clé d'accès</span>
+                    </div>
+                </div>
+                <button @onclick="() => showNewBanner = false" aria-label="Fermer la bannière"
+                        class="flex-shrink-0 text-snow/70 hover:text-snow text-xl leading-none transition-colors p-1.5 -m-1">×</button>
+            </div>
+        }
+
+        <!-- ── Panneau profil : morphologie, niveau d'activité, objectifs ──── -->
+        @if (showProfilePanel)
+        {
+            <div class="bg-white rounded-xl shadow-sm p-4 space-y-3 print:hidden">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-gray-700">Profil &amp; objectifs</h3>
+                    <button @onclick="() => showProfilePanel = false" aria-label="Fermer le panneau profil"
+                            class="text-gray-400 hover:text-gray-600 text-lg leading-none p-1.5 -m-1.5 transition-colors">×</button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-[11px] font-medium text-gray-400">Sexe</label>
+                        <div class="flex gap-1">
+                            @foreach (var sexOpt in new[] { ("F", "Femme"), ("M", "Homme") }) { var so = sexOpt;
+                                <button @onclick="async () => { profileSex = profileSex == so.Item1 ? null : so.Item1; await SaveProfile(); }"
+                                        class="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors @(profileSex == so.Item1 ? "bg-carbon text-volt" : "bg-gray-100 text-gray-500 hover:bg-gray-200")">@so.Item2</button>
+                            }
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-[11px] font-medium text-gray-400">Taille</label>
+                        <input type="number" min="80" max="250" @bind="profileHeight" @bind:after="SaveProfile" placeholder="—"
+                               class="w-16 bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                        <span class="text-[11px] text-gray-400">cm</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-[11px] font-medium text-gray-400">Poids</label>
+                        <input type="number" min="20" max="350" step="0.5" @bind="profileWeight" @bind:after="SaveProfile" placeholder="—"
+                               class="w-16 bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                        <span class="text-[11px] text-gray-400">kg</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-[11px] font-medium text-gray-400">Année de naissance</label>
+                        <input type="number" min="1900" max="2030" @bind="profileBirthYear" @bind:after="SaveProfile" placeholder="—"
+                               class="w-20 bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <label class="text-[11px] font-medium text-gray-400 flex-shrink-0">Niveau d'activité</label>
+                    <select @bind="profileActivity" @bind:after="SaveProfile"
+                            class="flex-1 min-w-[200px] bg-slate-50 rounded-lg px-2 py-1.5 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-300 border-0">
+                        <option value="">—</option>
+                        @foreach (var lvl in DiaryService.ActivityLevels)
+                        { <option value="@lvl.Key">@lvl.Label</option> }
+                    </select>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-[11px] font-medium text-gray-400">Plafond kcal ingérées / j</label>
+                        <input type="number" min="0" step="50" @bind="profileKcalTarget" @bind:after="SaveProfile" placeholder="—"
+                               class="w-20 bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-[11px] font-medium text-gray-400">Objectif kcal dépensées / j</label>
+                        <input type="number" min="0" step="50" @bind="profileBurnTarget" @bind:after="SaveProfile" placeholder="—"
+                               class="w-20 bg-slate-50 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 text-center" />
+                    </div>
+                </div>
+
+                @if (ProfileBmr is double panelBmr && ProfileNeeds is double panelNeeds)
+                {
+                    <div class="bg-carbon rounded-lg px-3 py-2.5">
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold">Estimation (Mifflin-St Jeor × activité)</p>
+                        <p class="font-display text-sm font-extrabold text-snow mt-1 tabular-nums">
+                            Métabolisme de base ≈ <span class="text-volt">@((int)panelBmr) kcal/j</span>
+                            &nbsp;·&nbsp; Besoins journaliers ≈ <span class="text-volt">@((int)panelNeeds) kcal/j</span>
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <p class="text-[11px] text-gray-400">Renseignez sexe, taille, poids et année de naissance pour estimer votre métabolisme de base.</p>
+                }
+            </div>
+        }
+
+        <!-- ── Panneau de partage (indépendant du bandeau) ──────────── -->
+        @if (showSharePanel)
+        {
+            <div class="bg-white rounded-xl shadow-sm p-4 space-y-4 print:hidden">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-gray-700">Partager votre carnet</h3>
+                    <button @onclick="CloseSharePanel" aria-label="Fermer le panneau de partage"
+                            class="text-gray-400 hover:text-gray-600 text-lg leading-none p-1.5 -m-1.5 transition-colors">×</button>
+                </div>
+
+                <!-- WhatsApp + Email -->
+                <div class="flex gap-2">
+                    <a href="@WhatsAppShareUrl" target="_blank" rel="noopener"
+                       class="flex-1 flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-medium px-3 py-2 rounded-xl transition-colors">
+                        📲 WhatsApp
+                    </a>
+                    <a href="@EmailShareUrl" target="_blank"
+                       class="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium px-3 py-2 rounded-xl transition-colors">
+                        ✉️ Email
+                    </a>
+                </div>
+
+                <!-- Lien direct -->
+                <div>
+                    <p class="text-[11px] font-medium text-gray-400 mb-1.5">🔗 Lien direct</p>
+                    <div class="flex gap-1.5">
+                        <input readonly value="@DiaryShareUrl"
+                               class="flex-1 min-w-0 bg-slate-50 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-gray-600 border-0 focus:outline-none" />
+                        <button @onclick="CopyUrl"
+                                class="flex-shrink-0 @(copiedUrl ? "bg-green-100 border-green-300 text-green-700" : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-gray-600") border text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            @(copiedUrl ? "✓ Copié !" : "Copier")
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Nutritionniste -->
+                <div>
+                    <p class="text-[11px] font-medium text-gray-400 mb-1.5">👩‍⚕️ Partager avec mon nutritionniste</p>
+                    @if (assignedNutri != null)
+                    {
+                        <div class="border border-slate-100 rounded-xl px-3 py-2 space-y-2">
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-700 truncate">@assignedNutri.Name</p>
+                                    <p class="text-[10px] text-gray-400 truncate">@assignedNutri.Email</p>
+                                </div>
+                                <span class="flex-shrink-0 text-[11px] text-green-700 font-medium bg-green-50 px-2 py-0.5 rounded-full">✓ Accès actif</span>
+                            </div>
+                            @if (confirmRevoke)
+                            {
+                                <div class="flex items-center gap-1.5 justify-end flex-wrap">
+                                    <button @onclick="RevokeNutritionist"
+                                            class="bg-red-50 hover:bg-red-100 text-red-600 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors">
+                                        Confirmer la révocation ?
+                                    </button>
+                                    <button @onclick="() => confirmRevoke = false"
+                                            class="text-gray-500 hover:text-gray-700 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors">
+                                        Annuler
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="flex justify-end">
+                                    <button @onclick="() => confirmRevoke = true"
+                                            class="text-red-500 hover:text-red-700 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors">
+                                        Révoquer l'accès
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <input value="@nutriSearch"
+                               @oninput="OnNutriSearchInput"
+                               type="text" placeholder="Rechercher par nom ou email…"
+                               class="w-full bg-slate-50 rounded-lg px-2.5 py-1.5 text-sm border-0 focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400 mb-1.5" />
+                        @if (nutriResults.Count > 0)
+                        {
+                            <div class="divide-y divide-slate-50 rounded-xl overflow-hidden">
+                                @foreach (var n in nutriResults)
+                                {
+                                    var nutri = n;
+                                    <div class="flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 transition-colors">
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-medium text-gray-700 truncate">@nutri.Name</p>
+                                            <p class="text-[10px] text-gray-400 truncate">@nutri.Email</p>
+                                        </div>
+                                        @if (nutriAssignedId == nutri.Id)
+                                        {
+                                            <span class="text-[11px] text-green-600 font-medium flex-shrink-0">✓ Invité(e)</span>
+                                        }
+                                        else
+                                        {
+                                            <button @onclick="async () => await AssignNutritionist(nutri.Id)"
+                                                    class="flex-shrink-0 bg-primary-50 hover:bg-primary-100 text-primary-600 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors">
+                                                + Inviter
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (nutriSearchDone && nutriResults.Count == 0)
+                        {
+                            <p class="text-[11px] text-gray-400 text-center py-2">Aucun résultat.</p>
+                        }
+                    }
+                </div>
+
+                <!-- Code PIN -->
+                <div>
+                    <p class="text-[11px] font-medium text-gray-400 mb-1.5 flex items-center gap-1">
+                        <Icon Name="lock" Class="w-3 h-3" /> Code PIN
+                    </p>
+                    @if (diary!.PinHash == null)
+                    {
+                        <div class="flex gap-1.5">
+                            <input @bind="pinNew" type="password" inputmode="numeric" maxlength="8"
+                                   placeholder="Nouveau PIN (4 à 8 chiffres)" aria-label="Nouveau PIN (4 à 8 chiffres)"
+                                   class="flex-1 min-w-0 bg-slate-50 rounded-lg px-2.5 py-1.5 text-sm border-0 focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                            <button @onclick="SetOrChangePin"
+                                    class="flex-shrink-0 bg-volt hover:bg-volt-dark text-carbon text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                                Définir le PIN
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="space-y-1.5">
+                            <div class="flex gap-1.5 flex-wrap">
+                                <input @bind="pinCurrent" type="password" inputmode="numeric" maxlength="8"
+                                       placeholder="PIN actuel" aria-label="PIN actuel"
+                                       class="flex-1 min-w-[110px] bg-slate-50 rounded-lg px-2.5 py-1.5 text-sm border-0 focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                                <input @bind="pinNew" type="password" inputmode="numeric" maxlength="8"
+                                       placeholder="Nouveau PIN" aria-label="Nouveau PIN"
+                                       class="flex-1 min-w-[110px] bg-slate-50 rounded-lg px-2.5 py-1.5 text-sm border-0 focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                            </div>
+                            <div class="flex gap-1.5">
+                                <button @onclick="SetOrChangePin"
+                                        class="bg-volt hover:bg-volt-dark text-carbon text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                                    Changer
+                                </button>
+                                <button @onclick="DeletePin"
+                                        class="text-red-500 hover:text-red-700 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                                    Supprimer le PIN
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    @if (pinFormError != null)
+                    {
+                        <p role="alert" class="text-red-500 text-xs mt-1.5">@pinFormError</p>
+                    }
+                </div>
+            </div>
+        }
+
         <!-- En-tête compact -->
-        <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center justify-between gap-2 print:hidden">
             <div class="flex items-center gap-2 min-w-0">
-                <h1 class="text-sm font-semibold text-gray-700 truncate">Mon carnet</h1>
+                <h1 class="font-display text-base font-semibold text-gray-800 truncate">Mon carnet</h1>
                 <span class="text-[10px] text-gray-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">@AccessCode</span>
             </div>
             <div class="flex items-center gap-1.5 flex-shrink-0">
                 @if (!showHistory)
                 {
-                    <div class="flex bg-slate-100 rounded-md p-0.5 text-[11px] font-medium">
+                    <div class="flex bg-gray-100 rounded-full p-0.5 text-[11px] font-semibold">
                         <button @onclick="() => tableView = false"
-                                class="px-2.5 py-1 rounded transition-colors @(!tableView ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">
+                                class="px-3 py-1 rounded-full transition-colors @(!tableView ? "bg-white shadow-sm text-gray-800" : "text-gray-400")">
                             Frise
                         </button>
                         <button @onclick="() => tableView = true"
-                                class="px-2.5 py-1 rounded transition-colors @(tableView ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">
+                                class="px-3 py-1 rounded-full transition-colors @(tableView ? "bg-white shadow-sm text-gray-800" : "text-gray-400")">
                             Tableau
                         </button>
                     </div>
+                    @if (tableView)
+                    {
+                        <button @onclick="PrintDay" aria-label="Imprimer la journée" title="Imprimer la journée"
+                                class="p-2 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                            <Icon Name="printer" Class="w-3.5 h-3.5" />
+                        </button>
+                    }
                 }
+                <button @onclick="ToggleSharePanel"
+                        title="Partager" aria-label="Partager le carnet"
+                        class="p-2 rounded-full transition-colors @(showSharePanel ? "bg-primary-100 text-primary-700" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600")">
+                    <Icon Name="share-2" Class="w-3.5 h-3.5" />
+                </button>
+                <button @onclick="() => showProfilePanel = !showProfilePanel"
+                        title="Profil" aria-label="Profil et objectifs"
+                        class="p-2 rounded-full transition-colors @(showProfilePanel ? "bg-primary-100 text-primary-700" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600")">
+                    <Icon Name="user" Class="w-3.5 h-3.5" />
+                </button>
                 <button @onclick="() => showHistory = !showHistory"
-                        class="text-xs text-primary-600 border border-primary-200 hover:border-primary-400 px-2.5 py-1 rounded-lg transition-colors">
-                    @(showHistory ? "← Journée" : "Historique")
+                        class="text-xs font-semibold bg-primary-50 text-primary-700 hover:bg-primary-100 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1">
+                    @if (showHistory)
+                    {
+                        <Icon Name="arrow-left" Class="w-3 h-3" /><span>Journée</span>
+                    }
+                    else
+                    {
+                        <Icon Name="history" Class="w-3 h-3" /><span>Historique</span>
+                    }
                 </button>
             </div>
         </div>
@@ -83,166 +370,229 @@ else
         else
         {
             <!-- Navigation date -->
-            <div class="bg-white rounded-xl border border-slate-100 shadow-sm px-2 py-1.5 flex items-center gap-2">
-                <button @onclick="PreviousDay" class="p-1.5 rounded-lg hover:bg-slate-50 text-gray-400 transition-colors text-sm leading-none">←</button>
-                <div class="text-center flex-1 flex items-center justify-center gap-2">
-                    <p class="font-semibold text-gray-700 capitalize text-sm">
-                        @selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+            <div class="flex items-end justify-between gap-2 pt-1">
+                <div class="min-w-0">
+                    <p class="font-display text-2xl font-extrabold tracking-tight leading-none text-carbon">
+                        <span class="capitalize">@selectedDate.ToString("dddd", new System.Globalization.CultureInfo("fr-FR"))</span>
+                        @selectedDate.ToString("d MMMM", new System.Globalization.CultureInfo("fr-FR"))
                     </p>
-                    @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
+                    @if (selectedDate == Time.Today)
                     {
-                        <span class="text-[10px] bg-primary-100 text-primary-600 px-1.5 py-0.5 rounded-full flex-shrink-0">Auj.</span>
+                        <p class="inline-block text-[9px] font-extrabold uppercase tracking-[.14em] bg-carbon text-volt px-2 py-1 rounded-[4px] mt-1.5">Aujourd'hui</p>
                     }
                 </div>
-                <button @onclick="NextDay" disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
-                        class="p-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-30 text-gray-400 transition-colors text-sm leading-none">→</button>
+                <div class="flex items-center flex-shrink-0 print:hidden">
+                    <button @onclick="PreviousDay" aria-label="Jour précédent"
+                            class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                        <Icon Name="chevron-left" Class="w-5 h-5" />
+                    </button>
+                    <button @onclick="NextDay" disabled="@(selectedDate >= Time.Today)" aria-label="Jour suivant"
+                            class="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 text-gray-400 hover:text-gray-600 transition-colors">
+                        <Icon Name="chevron-right" Class="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bilan du jour — bloc charbon signature VOLT : chiffres volt, jauge 6 segments -->
+            <div class="bg-carbon rounded-xl p-4 pb-3.5 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
+                <div class="flex items-center gap-1.5 mb-3">
+                    <span class="w-1.5 h-1.5 bg-volt" aria-hidden="true"></span>
+                    <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">Bilan du jour</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="min-w-0">
+                        <p class="font-display text-2xl font-extrabold text-volt leading-none tabular-nums">@FilledMealsCount<span class="text-[11px] font-extrabold text-snow ml-0.5">/@DiaryService.MealSlots.Length</span></p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Repas</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-2xl font-extrabold text-volt leading-none tabular-nums">@FormatHydration(EstimatedHydrationMl)</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Hydratation</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-2xl font-extrabold text-volt leading-none tabular-nums">@FormatActivity(TotalActivityMinutes)</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Activité</p>
+                    </div>
+                </div>
+                <!-- Balance énergétique : kcal ingérées (repas) vs dépensées (activités), avec seuils du profil -->
+                <div class="grid grid-cols-3 gap-2 mt-3">
+                    <div class="min-w-0">
+                        <p class="font-display text-lg font-extrabold leading-none tabular-nums @(IntakeExceeded ? "text-[#ff8a75]" : "text-snow")">@FormatDayKcal(DayKcalTotal)@if (diary!.DailyKcalTarget is int intakeTarget && intakeTarget > 0) { <span class="text-[10px] font-bold text-[#79838c]">/@intakeTarget</span> }</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Kcal ingérées</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-lg font-extrabold leading-none tabular-nums @(BurnReached ? "text-volt" : "text-snow")">@FormatDayKcal(TotalBurnedKcal)@if (diary!.DailyBurnTarget is int burnTarget && burnTarget > 0) { <span class="text-[10px] font-bold text-[#79838c]">/@burnTarget</span> }</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Kcal dépensées</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-lg font-extrabold text-volt leading-none tabular-nums">@FormatKcalBalance()</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Bilan@(ProfileBmr != null ? " (MB inclus)" : "")</p>
+                    </div>
+                </div>
+                @if (ProfileBmr is double bilanBmr && ProfileNeeds is double bilanNeeds)
+                {
+                    <!-- Seuils du profil : métabolisme, besoins, état des objectifs -->
+                    <p class="text-[8.5px] uppercase tracking-[.12em] text-[#79838c] font-bold mt-2.5 leading-relaxed">
+                        MB ≈ @((int)bilanBmr) kcal · Besoins ≈ @((int)bilanNeeds) kcal/j
+                        @if (diary!.DailyKcalTarget is int limitK && limitK > 0)
+                        {
+                            <span class="@(IntakeExceeded ? "text-[#ff8a75]" : "text-volt")"> · Plafond @(IntakeExceeded ? $"dépassé de {(int)(DayKcalTotal - limitK)}" : "respecté")</span>
+                        }
+                        @if (diary!.DailyBurnTarget is int goalB && goalB > 0)
+                        {
+                            <span class="@(BurnReached ? "text-volt" : "")"> · Dépense @(BurnReached ? "objectif atteint" : $"reste {goalB - TotalBurnedKcal}")</span>
+                        }
+                    </p>
+                }
+                <div class="flex gap-1 mt-3" aria-hidden="true">
+                    @for (var seg = 0; seg < DiaryService.MealSlots.Length; seg++)
+                    {
+                        <span class="flex-1 h-1 rounded-sm @(seg < FilledMealsCount ? "bg-volt" : "bg-carbon-2")"></span>
+                    }
+                </div>
             </div>
 
             @if (tableView)
             {
-                <DiaryTableView
-                    DailyLog="@currentLog"
-                    DiaryId="@diary!.Id"
-                    Date="@selectedDate"
-                    OnChanged="@LoadDay" />
+                <div style="width:100vw;margin-left:calc(50% - 50vw);padding:0 1rem;box-sizing:border-box;">
+                    <DiaryTableView
+                        DailyLog="@currentLog"
+                        DiaryId="@diary!.Id"
+                        Date="@selectedDate"
+                        OnChanged="@LoadDay" />
+                </div>
             }
             else
             {
-                <!-- Frise verticale -->
-                <div class="relative">
-                    <div class="absolute left-4 top-4 bottom-4 w-px bg-slate-200 z-0"></div>
-
-                    <div class="space-y-1">
-                        @for (int si = 0; si < DiaryService.MealSlots.Length; si++)
+                <!-- Journée — sections plates, timeline fine : heures en marge, pastilles sur rail dégradé -->
+                <div class="relative pl-[60px]">
+                    <div class="absolute left-[50px] top-2 bottom-2 w-[2px] bg-[#cbd3da]" aria-hidden="true"></div>
+                    @{
+                        var friseRows = GetFriseRows().ToList();
+                    }
+                    <div>
+                        @for (int ri = 0; ri <= friseRows.Count; ri++)
                         {
-                            int slotIdx = si;
-                            var slot = DiaryService.MealSlots[slotIdx];
-                            var mealEvent = GetMealSlotEvent(slotIdx);
-
-                            <!-- Activités + zone de dépôt AVANT le premier jalon -->
-                            @if (slotIdx == 0)
-                            {
-                                var before = GetActivitiesBeforeAll();
-                                @foreach (var act in before)
-                                {
-                                    var a = act;
-                                    <div class="pl-10 mb-1" draggable="true"
-                                         @ondragstart="() => StartDrag(a)" @ondragend="EndDrag"
-                                         style="@DragStyle(a.Id)">
-                                        <EventCard Event="a" OnChanged="LoadDay" OnDelete="DeleteEvent" />
-                                    </div>
-                                }
-                                <div class="pl-10 mb-1">
-                                    <!-- zone dépôt activité avant slot 0 (index -1) -->
-                                    @if (draggedEvent?.EventType == DayEventType.Activity)
-                                    {
-                                        <div class="@ActDropZoneClass(-1) mb-1 rounded-lg transition-all duration-150 text-center text-[10px] text-primary-400"
-                                             @ondragover:preventDefault="true"
-                                             @ondragover="() => actDropTarget = -1"
-                                             @ondragleave="() => ClearActDrop(-1)"
-                                             @ondrop="async () => await HandleActivityDrop(null)">
-                                            @if (actDropTarget == -1) { <span>Déposer ici</span> }
-                                        </div>
-                                    }
-                                    <button @onclick="() => AddActivity(null)" class="@AddActivityBtnClass">+ Activité</button>
-                                </div>
-                            }
-
-                            <!-- Nœud du jalon alimentaire -->
-                            <div class="flex gap-2.5 items-start relative z-10 mb-0.5"
+                            int insertIdx = ri;
+                            var prevRow = ri > 0 ? friseRows[ri - 1] : null;
+                            var nextRow = ri < friseRows.Count ? friseRows[ri] : null;
+                            var bTime = CalcInsertTime(prevRow, nextRow);
+                            <!-- ╌ Zone d'insertion pleine largeur (survol pointeur fin, toujours visible au tactile,
+                                 accepte aussi le dépôt d'une activité glissée) ╌ -->
+                            <div class="group/insert flex gap-2 items-center h-5 cursor-default relative z-10 print:hidden"
                                  @ondragover:preventDefault="true"
-                                 @ondragover="() => OnMealSlotDragOver(slotIdx)"
-                                 @ondragleave="() => OnMealSlotDragLeave(slotIdx)"
-                                 @ondrop="async () => await HandleMealDrop(slotIdx)">
-                                <!-- Icône -->
-                                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white border-2 @SlotBorderClass(slotIdx) flex items-center justify-center text-sm shadow-sm z-10 transition-all @(mealDropTarget == slotIdx ? "ring-2 ring-primary-400 scale-110" : "")">
-                                    @slot.Icon
-                                </div>
-                                <!-- Contenu -->
-                                <div class="flex-1 min-w-0">
-                                    @if (mealEvent == null)
-                                    {
-                                        <div class="bg-white rounded-xl border @(mealDropTarget == slotIdx ? "border-primary-300 bg-primary-50/40" : "border-dashed border-slate-200") px-3 py-2 flex items-center gap-2 transition-colors">
-                                            <div class="flex-1 min-w-0">
-                                                <p class="font-medium text-gray-400 text-sm">@slot.Label</p>
-                                                <p class="text-[10px] text-gray-300 font-mono">@slot.DefaultTime.ToString("HH:mm")</p>
-                                            </div>
-                                            <button @onclick="() => StartMealSlot(slotIdx)"
-                                                    class="flex-shrink-0 bg-primary-50 hover:bg-primary-100 text-primary-600 border border-primary-200 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors">
-                                                + Saisir
-                                            </button>
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <div draggable="true"
-                                             @ondragstart="() => StartDrag(mealEvent)"
-                                             @ondragend="EndDrag"
-                                             style="@DragStyle(mealEvent.Id) cursor:grab">
-                                            <EventCard Event="mealEvent"
-                                                       ConcurrentActivities="@GetConcurrentActivities(slotIdx)"
-                                                       OnChanged="LoadDay" OnDelete="DeleteEvent" />
-                                        </div>
-                                    }
+                                 @ondragover="() => OnInsertDragOver(insertIdx)"
+                                 @ondragleave="() => OnInsertDragLeave(insertIdx)"
+                                 @ondrop="async () => await HandleActivityDropAt(bTime, insertIdx)">
+                                <div class="flex-1 flex items-center opacity-0 group-hover/insert:opacity-100 pointer-coarse:opacity-100 transition-opacity duration-150 pointer-events-none @(actDropTarget == insertIdx ? "!opacity-100" : "")">
+                                    <div class="flex-1 h-px @(actDropTarget == insertIdx ? "bg-volt" : "bg-[#cbd3da]")"></div>
+                                    <button @onclick="async () => await InsertActivity(bTime)"
+                                            class="pointer-events-auto mx-2 text-[9px] font-extrabold uppercase tracking-[.1em] px-2.5 py-1 rounded-[5px] transition-colors whitespace-nowrap @(actDropTarget == insertIdx ? "bg-volt text-carbon" : "bg-carbon text-volt hover:bg-carbon-2")">
+                                        @(actDropTarget == insertIdx ? "Déposer ici" : "+ Activité sportive")
+                                    </button>
+                                    <div class="flex-1 h-px @(actDropTarget == insertIdx ? "bg-volt" : "bg-[#cbd3da]")"></div>
                                 </div>
                             </div>
 
-                            <!-- Zone inter-jalons : activités draggables + zone de dépôt -->
-                            <div class="pl-10 py-0.5 space-y-1.5">
-                                @foreach (var act in GetActivitiesAfterSlot(slotIdx))
+                            @if (ri < friseRows.Count)
+                            {
+                                var row = friseRows[ri];
+                                var rowEvent = row.Event;
+                                bool isEmptySlot = rowEvent == null;
+                                bool isMeal = rowEvent?.EventType == DayEventType.Meal;
+                                int? slotIdx = rowEvent?.MealSlot ?? row.EmptySlot;
+
+                                if (isMeal || isEmptySlot)
                                 {
-                                    var a = act;
-                                    <div draggable="true"
-                                         @ondragstart="() => StartDrag(a)" @ondragend="EndDrag"
-                                         style="@DragStyle(a.Id) cursor:grab">
-                                        <EventCard Event="a" OnChanged="LoadDay" OnDelete="DeleteEvent" />
-                                    </div>
-                                }
-                                @if (draggedEvent?.EventType == DayEventType.Activity)
-                                {
-                                    <div class="@ActDropZoneClass(slotIdx) rounded-lg transition-all duration-150 text-center text-[10px] text-primary-400"
+                                    var slotInfo = slotIdx.HasValue ? DiaryService.MealSlots[slotIdx.Value] : DiaryService.MealSlots[0];
+                                    @* Pas de z-index ici : un contexte d'empilement piégerait les popovers
+                                       (z-30) de l'EventCard sous les lignes suivantes de la frise. *@
+                                    <div @key="@($"slot-{slotIdx}")" class="relative mb-5"
                                          @ondragover:preventDefault="true"
-                                         @ondragover="() => actDropTarget = slotIdx"
-                                         @ondragleave="() => ClearActDrop(slotIdx)"
-                                         @ondrop="async () => await HandleActivityDrop(slotIdx)">
-                                        @if (actDropTarget == slotIdx) { <span>Déposer ici</span> }
+                                         @ondragover="() => OnMealSlotDragOver(slotIdx ?? -1)"
+                                         @ondragleave="() => OnMealSlotDragLeave(slotIdx ?? -1)"
+                                         @ondrop="async () => await HandleMealDrop(slotIdx ?? -1)">
+                                        @if (isEmptySlot)
+                                        {
+                                            <span class="absolute -left-[60px] top-[13px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#9aa4ad] select-none" aria-hidden="true">@slotInfo.DefaultTime.ToString(@"HH\:mm")</span>
+                                        }
+                                        else
+                                        {
+                                            @* Heure éditable directement sur la frise : input time nu (pas de @bind sur type=time) *@
+                                            <input type="time"
+                                                   value="@((rowEvent!.Time ?? slotInfo.DefaultTime).ToString(@"HH\:mm"))"
+                                                   @onchange="async e => await UpdateEventTime(rowEvent!, e)"
+                                                   aria-label="@($"Heure — {rowEvent!.Label}")"
+                                                   class="absolute -left-[60px] top-[9px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#2a3138] bg-transparent p-0 border-0 rounded-[3px] cursor-pointer appearance-none [&::-webkit-calendar-picker-indicator]:hidden focus:outline-none focus:ring-2 focus:ring-volt" />
+                                        }
+                                        <span class="absolute -left-[13px] top-4 w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] @(isEmptySlot ? "bg-[#aeb8c0]" : "bg-volt")" aria-hidden="true"></span>
+                                        <div class="min-w-0 @(mealDropTarget == slotIdx ? "ring-2 ring-primary-300 rounded-xl" : "")">
+                                            @if (isEmptySlot)
+                                            {
+                                                <!-- Jalon vide : hachures + AJOUTER. Un clic crée la carte en édition ;
+                                                     refermée sans aucune saisie, elle est supprimée (balayage LoadDay)
+                                                     et le jalon redevient fantôme. -->
+                                                <button type="button"
+                                                        @onclick="async () => await OpenSlot(slotIdx!.Value)"
+                                                        class="group/ghost w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg bg-[repeating-linear-gradient(135deg,#dde3e9_0_7px,#e4e9ee_7px_14px)]">
+                                                    <span class="flex-1 min-w-0 font-display text-[13px] font-extrabold text-[#69737d] pointer-fine:group-hover/ghost:text-[#4a545e] transition-colors duration-150">@slotInfo.Label</span>
+                                                    <span class="bg-volt text-carbon rounded-[5px] px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-[.1em] shadow-[0_2px_0_rgba(14,17,20,.18)] flex-shrink-0 select-none">+ Ajouter</span>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <div @key="@($"evt-{rowEvent!.Id}")" style="@DragStyle(rowEvent!.Id)">
+                                                    <EventCard Event="rowEvent!"
+                                                               ConcurrentActivities="@(slotIdx.HasValue ? GetConcurrentActivities(slotIdx.Value) : EmptyActivities)"
+                                                               QuickFoods="@topFoods" QuickCompositions="@topCompositions" FoodSuggestions="@foodSuggestions" Catalog="@catalog"
+                                                               IsEditing="@(editingEventId == rowEvent!.Id)" OnToggleEdit="() => ToggleEdit(rowEvent!.Id)"
+                                                               OnChanged="LoadDay" OnDelete="DeleteEvent"
+                                                               OnCardDragStart="() => StartDrag(rowEvent!)"
+                                                               OnCardDragEnd="EndDrag" />
+                                                </div>
+                                            }
+                                        </div>
                                     </div>
                                 }
-                                <button @onclick="() => AddActivity(slotIdx)" class="@AddActivityBtnClass">+ Activité sportive</button>
-                            </div>
+                                else
+                                {
+                                    <div @key="@($"evt-{rowEvent!.Id}")" class="relative mb-5"
+                                         style="@DragStyle(rowEvent!.Id)">
+                                        <input type="time"
+                                               value="@(rowEvent!.Time?.ToString(@"HH\:mm") ?? "")"
+                                               @onchange="async e => await UpdateEventTime(rowEvent!, e)"
+                                               aria-label="@($"Heure — {rowEvent!.Label}")"
+                                               class="absolute -left-[60px] top-[9px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#2a3138] bg-transparent p-0 border-0 rounded-[3px] cursor-pointer appearance-none [&::-webkit-calendar-picker-indicator]:hidden focus:outline-none focus:ring-2 focus:ring-volt" />
+                                        <span class="absolute -left-[13px] top-4 w-2 h-2 rotate-45 bg-carbon shadow-[0_0_0_3px_#e9edf1]" aria-hidden="true"></span>
+                                        <div class="min-w-0">
+                                            <EventCard Event="rowEvent!" ConcurrentActivities="@EmptyActivities"
+                                                       QuickFoods="@topFoods" QuickCompositions="@topCompositions" FoodSuggestions="@foodSuggestions" Catalog="@catalog"
+                                                       IsEditing="@(editingEventId == rowEvent!.Id)" OnToggleEdit="() => ToggleEdit(rowEvent!.Id)"
+                                                       OnChanged="LoadDay" OnDelete="DeleteEvent"
+                                                       OnCardDragStart="() => StartDrag(rowEvent!)"
+                                                       OnCardDragEnd="EndDrag" />
+                                        </div>
+                                    </div>
+                                }
+                            }
                         }
                     </div>
                 </div>
             }
 
-            <!-- Bilan journée -->
-            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-3">
-                <h3 class="font-semibold text-gray-600 mb-3 flex items-center gap-1.5 text-sm"><span>📊</span> Bilan de la journée</h3>
-
-                <!-- Stats calculées automatiquement -->
-                <div class="grid grid-cols-2 gap-2 mb-3">
-                    <div class="bg-blue-50 rounded-lg px-3 py-2">
-                        <p class="text-[10px] text-blue-400 font-medium mb-0.5">💧 Hydratation</p>
-                        <p class="text-base font-bold text-blue-700 leading-tight">@FormatHydration(EstimatedHydrationMl)</p>
-                        <p class="text-[10px] text-blue-300">@TotalDrinksCount prise(s)</p>
-                    </div>
-                    <div class="bg-emerald-50 rounded-lg px-3 py-2">
-                        <p class="text-[10px] text-emerald-400 font-medium mb-0.5">🏃 Activité</p>
-                        <p class="text-base font-bold text-emerald-700 leading-tight">@FormatActivity(TotalActivityMinutes)</p>
-                        <p class="text-[10px] text-emerald-300">@TotalActivityCount activité(s)</p>
-                    </div>
-                </div>
+            <!-- Notes de la journée — section plate -->
+            <div class="border-t border-gray-100 pt-4 print:hidden">
+                <h3 class="font-display font-bold text-gray-900 mb-3 text-lg">Notes de la journée</h3>
 
                 <div class="space-y-2">
                     <div>
                         <label class="block text-[11px] font-medium text-gray-400 mb-1">🧘 Émotions / Stress (journée)</label>
                         <textarea @bind="emotions" @onblur="SaveDaySummary" rows="2" placeholder="Comment vous sentez-vous globalement aujourd'hui ?"
-                                  class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-300"></textarea>
+                                  class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-400"></textarea>
                     </div>
                     <div>
                         <label class="block text-[11px] font-medium text-gray-400 mb-1">📝 Notes générales</label>
                         <textarea @bind="generalNotes" @onblur="SaveDaySummary" rows="2" placeholder="Observations, remarques…"
-                                  class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-300"></textarea>
+                                  class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-400"></textarea>
                     </div>
                 </div>
             </div>
@@ -252,6 +602,9 @@ else
 
 @code {
     [Parameter] public string AccessCode { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "nouveau")]
+    [Parameter] public bool IsNew { get; set; }
 
     FoodDiary? diary;
     DailyLog? currentLog;
@@ -264,12 +617,199 @@ else
     bool tableView;
     string emotions = "", generalNotes = "";
 
-    const string AddActivityBtnClass =
-        "w-full border border-dashed border-gray-200 hover:border-green-300 text-gray-300 hover:text-green-500 rounded-xl py-1.5 text-xs font-medium transition-colors";
+    // ── Bannière nouveau carnet ──────────────────────────────────────────
+    bool showNewBanner;
+    bool showSharePanel;
+    bool copiedUrl;
+    string nutriSearch = "";
+    List<NutriPlan.Data.Models.Nutritionist> nutriResults = [];
+    bool nutriSearchDone;
+    int? nutriAssignedId;
+    NutriPlan.Data.Models.Nutritionist? assignedNutri;
+    bool confirmRevoke;
+
+    // ── Gestion du PIN (panneau de partage) ──────────────────────────────
+    string pinCurrent = "", pinNew = "";
+    string? pinFormError;
+
+    // ── Autocomplétion des aliments ──────────────────────────────────────
+    List<string> foodSuggestions = [];
+
+    // ── Référentiel Ciqual (ANSES) : ~3 500 aliments génériques, cache process-wide ──
+    IReadOnlyList<CatalogFood> catalog = [];
+
+    // ── Raccourcis : aliments favoris (les plus saisis, avec leur dernière quantité) ──
+    List<DiaryService.FrequentFood> topFoods = [];
+
+    // ── Raccourcis : compositions favorites (avec toutes leurs composantes) ──
+    List<DiaryService.FrequentComposition> topCompositions = [];
+
+    const string SaveError = "Enregistrement impossible — vérifiez votre connexion.";
+
+    // ── Profil & objectifs (métabolisme Mifflin-St Jeor, plafonds) ──────────
+    bool showProfilePanel;
+    string? profileSex;
+    int? profileHeight;
+    double? profileWeight;
+    int? profileBirthYear;
+    string? profileActivity;
+    int? profileKcalTarget;
+    int? profileBurnTarget;
+
+    void LoadProfileFields()
+    {
+        if (diary == null) return;
+        profileSex = diary.Sex;
+        profileHeight = diary.HeightCm;
+        profileWeight = diary.WeightKg;
+        profileBirthYear = diary.BirthYear;
+        profileActivity = diary.ActivityLevel;
+        profileKcalTarget = diary.DailyKcalTarget;
+        profileBurnTarget = diary.DailyBurnTarget;
+    }
+
+    async Task SaveProfile()
+    {
+        if (diary == null) return;
+        try
+        {
+            await DiaryService.UpdateProfileAsync(diary.Id, profileSex, profileHeight, profileWeight,
+                profileBirthYear, profileActivity, profileKcalTarget, profileBurnTarget);
+            diary.Sex = profileSex; diary.HeightCm = profileHeight; diary.WeightKg = profileWeight;
+            diary.BirthYear = profileBirthYear; diary.ActivityLevel = profileActivity;
+            diary.DailyKcalTarget = profileKcalTarget; diary.DailyBurnTarget = profileBurnTarget;
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveError); }
+    }
+
+    double? ProfileBmr => diary == null ? null : DiaryService.BasalMetabolicRate(diary, selectedDate.Year);
+    double? ProfileNeeds => diary == null ? null : DiaryService.DailyEnergyNeeds(diary, selectedDate.Year);
+    bool IntakeExceeded => diary?.DailyKcalTarget is int intakeT && intakeT > 0 && DayKcalTotal > intakeT;
+    bool BurnReached => diary?.DailyBurnTarget is int burnT && burnT > 0 && TotalBurnedKcal >= burnT;
+
+    // ── Lecture / édition : un seul événement en édition à la fois ──────────
+    int? editingEventId;
+
+    async Task ToggleEdit(int eventId)
+    {
+        var closing = editingEventId;
+        editingEventId = editingEventId == eventId ? null : eventId;
+        // À la fermeture, le balayage de LoadDay rend le jalon fantôme s'il est resté vierge.
+        if (closing.HasValue && closing != editingEventId)
+            await LoadDay();
+    }
+
+    void ToggleSharePanel()
+    {
+        showSharePanel = !showSharePanel;
+        confirmRevoke = false;
+        pinFormError = null;
+    }
+
+    void CloseSharePanel()
+    {
+        showSharePanel = false;
+        confirmRevoke = false;
+        pinFormError = null;
+    }
+
+    string DiaryShareUrl => Nav.BaseUri.TrimEnd('/') + $"/carnet/{AccessCode}";
+    string WhatsAppShareUrl => $"https://wa.me/?text={Uri.EscapeDataString($"Mon carnet NutriPlan\nCode : {AccessCode}\n{DiaryShareUrl}")}";
+    string EmailShareUrl => $"mailto:?subject={Uri.EscapeDataString("Mon carnet NutriPlan")}&body={Uri.EscapeDataString($"Voici mon code d'accès NutriPlan : {AccessCode}\nLien direct : {DiaryShareUrl}")}";
+
+    async Task CopyUrl()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", DiaryShareUrl);
+            copiedUrl = true;
+        }
+        catch
+        {
+            // non-HTTPS ou refus navigateur — l'input reste sélectionnable
+            Toast.ShowError("Copie impossible — sélectionnez le lien manuellement.");
+            return;
+        }
+        StateHasChanged();
+        await Task.Delay(2000);
+        copiedUrl = false;
+        StateHasChanged();
+    }
+
+    async Task OnNutriSearchInput(ChangeEventArgs e)
+    {
+        nutriSearch = e.Value?.ToString() ?? "";
+        if (nutriSearch.Length < 2) { nutriResults = []; nutriSearchDone = false; return; }
+        nutriResults = await NutritionistService.SearchAsync(nutriSearch);
+        nutriSearchDone = true;
+        StateHasChanged();
+    }
+
+    async Task AssignNutritionist(int nutritionistId)
+    {
+        if (diary == null) return;
+        await DiaryService.AssignNutritionistAsync(diary.Id, nutritionistId);
+        nutriAssignedId = nutritionistId;
+        assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
+        LoadProfileFields();
+        nutriSearch = ""; nutriResults = []; nutriSearchDone = false;
+        Toast.ShowSuccess("Nutritionniste invité.");
+    }
+
+    async Task RevokeNutritionist()
+    {
+        if (diary == null) return;
+        await DiaryService.RemoveNutritionistAsync(diary.Id);
+        assignedNutri = null;
+        nutriAssignedId = null;
+        confirmRevoke = false;
+        Toast.ShowSuccess("Accès du nutritionniste révoqué.");
+    }
+
+    // ── Gestion du PIN ────────────────────────────────────────────────────
+
+    async Task SetOrChangePin()
+    {
+        pinFormError = null;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(pinNew, @"^\d{4,8}$"))
+        {
+            pinFormError = "Le nouveau PIN doit comporter 4 à 8 chiffres.";
+            return;
+        }
+        var ok = await DiaryService.UpdatePinAsync(diary!.Id,
+            string.IsNullOrEmpty(pinCurrent) ? null : pinCurrent, pinNew);
+        if (!ok) { pinFormError = "PIN actuel incorrect."; return; }
+        await ReloadDiaryAfterPinChange();
+        Toast.ShowSuccess("PIN mis à jour.");
+    }
+
+    async Task DeletePin()
+    {
+        pinFormError = null;
+        var ok = await DiaryService.UpdatePinAsync(diary!.Id,
+            string.IsNullOrEmpty(pinCurrent) ? null : pinCurrent, null);
+        if (!ok) { pinFormError = "PIN actuel incorrect."; return; }
+        await ReloadDiaryAfterPinChange();
+        Toast.ShowSuccess("PIN supprimé.");
+    }
+
+    // Recharge le carnet après modification du PIN, sans repasser par le
+    // formulaire de déverrouillage : la session courante est re-déverrouillée
+    // avec l'empreinte du NOUVEAU PIN (les autres navigateurs, eux, devront le saisir).
+    async Task ReloadDiaryAfterPinChange()
+    {
+        var code = AccessCode.ToUpperInvariant();
+        diary = await DiaryService.GetDiaryByCodeAsync(code);
+        pinCurrent = ""; pinNew = "";
+        await Session.UnlockAsync(code, DiarySessionService.PinStamp(diary!.PinHash));
+    }
+
+    async Task PrintDay() => await JS.InvokeVoidAsync("nutriplan.print");
 
     // ── Drag & drop ──────────────────────────────────────────────────────────
     DayEvent? draggedEvent;
-    int? actDropTarget;   // -1 = avant slot 0 ; 0-5 = après slot n
+    int? actDropTarget;   // index de la zone d'insertion survolée pendant le drag d'une activité
     int? mealDropTarget;  // slot cible pour un jalon repas
 
     void StartDrag(DayEvent evt) { draggedEvent = evt; actDropTarget = null; mealDropTarget = null; }
@@ -277,20 +817,26 @@ else
 
     void OnMealSlotDragOver(int slotIdx)  { if (draggedEvent?.EventType == DayEventType.Meal)     mealDropTarget = slotIdx; }
     void OnMealSlotDragLeave(int slotIdx) { if (mealDropTarget == slotIdx) mealDropTarget = null; }
-    void ClearActDrop(int zoneId)         { if (actDropTarget == zoneId)   actDropTarget  = null; }
+
+    void OnInsertDragOver(int zoneId)  { if (draggedEvent?.EventType == DayEventType.Activity) actDropTarget = zoneId; }
+    void OnInsertDragLeave(int zoneId) { if (actDropTarget == zoneId) actDropTarget = null; }
 
     string DragStyle(int id) => draggedEvent?.Id == id ? "opacity:0.35;" : "";
-    string ActDropZoneClass(int zoneId) => actDropTarget == zoneId
-        ? "border border-dashed border-primary-300 bg-primary-50/50 py-2"
-        : "border border-dashed border-transparent py-0.5";
 
-    async Task HandleActivityDrop(int? afterSlot)
+    // Dépôt d'une activité sur une zone d'insertion : elle prend l'heure de la zone.
+    async Task HandleActivityDropAt(TimeOnly time, int zoneId)
     {
-        if (draggedEvent == null || draggedEvent.EventType != DayEventType.Activity) return;
+        if (draggedEvent == null || draggedEvent.EventType != DayEventType.Activity) { actDropTarget = null; return; }
         actDropTarget = null;
-        await DiaryService.MoveActivityAsync(draggedEvent.Id, afterSlot);
+        var evtId = draggedEvent.Id;
         draggedEvent = null;
-        await LoadDay();
+        try
+        {
+            await DiaryService.UpdateEventTimeAsync(evtId, time);
+            await LoadDay();
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveError); }
     }
 
     async Task HandleMealDrop(int targetSlot)
@@ -303,14 +849,26 @@ else
         await LoadDay();
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        // Date du jour côté client (fuseau du navigateur) — prerender désactivé,
+        // le JS interop est disponible dès l'initialisation.
+        selectedDate = await Time.TodayAsync();
+    }
+
     protected override async Task OnParametersSetAsync()
     {
+        await Session.EnsureLoadedAsync();
+        if (IsNew) showNewBanner = true;
         isLoading = true; showPinForm = false; pinError = false;
         var code = AccessCode.ToUpperInvariant();
         diary = await DiaryService.GetDiaryByCodeAsync(code);
         if (diary == null) { isLoading = false; return; }
-        if (diary.PinHash != null && !Session.IsUnlocked(code)) { showPinForm = true; isLoading = false; return; }
-        Session.Unlock(code); isLoading = false;
+        var pinStamp = DiarySessionService.PinStamp(diary.PinHash);
+        if (diary.PinHash != null && !Session.IsUnlocked(code, pinStamp)) { showPinForm = true; isLoading = false; return; }
+        await Session.UnlockAsync(code, pinStamp); isLoading = false;
+        assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
+        LoadProfileFields();
         await LoadDay();
     }
 
@@ -318,70 +876,90 @@ else
     {
         pinError = false;
         var valid = await DiaryService.ValidatePinAsync(diary!.AccessCode, pinInput);
-        if (valid) { Session.Unlock(diary.AccessCode); showPinForm = false; await LoadDay(); }
+        if (valid)
+        {
+            await Session.UnlockAsync(diary.AccessCode, DiarySessionService.PinStamp(diary.PinHash));
+            showPinForm = false;
+            assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
+        LoadProfileFields();
+            await LoadDay();
+        }
         else { pinError = true; }
     }
 
-    void OnPinKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") _ = ValidatePin(); }
+    async Task OnPinKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await ValidatePin(); }
 
     async Task LoadDay()
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
+        // Balayage : un jalon créé puis laissé vierge (éditeur refermé, onglet fermé,
+        // déconnexion) est supprimé et redevient fantôme — sauf celui en cours d'édition.
+        var untouched = (currentLog?.Events ?? []).Where(e => e.Id != editingEventId && IsUntouchedSlotEvent(e)).Select(e => e.Id).ToList();
+        if (untouched.Count > 0)
+        {
+            foreach (var id in untouched) { try { await DiaryService.DeleteEventAsync(id); } catch { } }
+            currentLog = await DiaryService.GetDailyLogFullAsync(diary.Id, selectedDate);
+        }
         emotions = currentLog?.Emotions ?? "";
         generalNotes = currentLog?.GeneralNotes ?? "";
+        foodSuggestions = await DiaryService.GetFoodSuggestionsAsync(diary.Id);
+        topFoods = await DiaryService.GetTopFoodsAsync(diary.Id);
+        topCompositions = await DiaryService.GetTopCompositionsAsync(diary.Id);
+        if (catalog.Count == 0) catalog = await DiaryService.GetCatalogAsync();
     }
 
-    async Task PreviousDay() { selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
+    async Task PreviousDay() { editingEventId = null; selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
 
     async Task NextDay()
     {
-        if (selectedDate < DateOnly.FromDateTime(DateTime.Today)) { selectedDate = selectedDate.AddDays(1); await LoadDay(); }
+        if (selectedDate < Time.Today) { editingEventId = null; selectedDate = selectedDate.AddDays(1); await LoadDay(); }
     }
 
-    void SelectDate(DateOnly date) { selectedDate = date; showHistory = false; _ = LoadDay(); }
-
-    async Task StartMealSlot(int slotIndex)
+    async Task SelectDate(DateOnly date)
     {
-        currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
-        await DiaryService.GetOrCreateMealSlotEventAsync(currentLog.Id, slotIndex);
-        await LoadDay();
-    }
-
-    async Task AddActivity(int? afterSlot)
-    {
-        currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
-        await DiaryService.AddActivityAfterSlotAsync(currentLog.Id, afterSlot);
+        editingEventId = null;
+        selectedDate = date;
+        showHistory = false;
         await LoadDay();
     }
 
     async Task DeleteEvent(int eventId)
     {
-        await DiaryService.DeleteEventAsync(eventId);
-        await LoadDay();
+        try
+        {
+            editingEventId = null;
+            await DiaryService.DeleteEventAsync(eventId);
+            await LoadDay();
+            Toast.ShowSaved();
+        }
+        catch { Toast.ShowError(SaveError); }
     }
 
     async Task SaveDaySummary()
     {
-        currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
-        await DiaryService.UpdateDailyLogSummaryAsync(currentLog.Id, null, emotions, generalNotes);
+        try
+        {
+            currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
+            // Hydration est un champ hérité sans UI de saisie : on le préserve tel quel.
+            await DiaryService.UpdateDailyLogSummaryAsync(currentLog.Id, currentLog.Hydration, emotions, generalNotes);
+            Toast.ShowSaved();
+        }
+        catch
+        {
+            Toast.ShowError(SaveError);
+        }
     }
 
     // ── Stats calculées ──────────────────────────────────────────────────────
 
-    static readonly Dictionary<string, int> DrinkVolumes = new()
-    {
-        { "Eau (1 verre)",      250 }, { "Eau (75cl)",        750 }, { "Eau (1,5L)",       1500 },
-        { "Eau gazeuse",        250 }, { "Café expresso",      30 }, { "Café allongé",      120 },
-        { "Thé (grande tasse)", 350 }, { "Boisson isotonique", 500 }, { "Électrolytes",      500 },
-        { "Sirop",              200 }, { "Jus de fruit",       200 },
-    };
-
-    int EstimatedHydrationMl => (currentLog?.Events ?? [])
-        .SelectMany(e => e.DrinkEntries)
-        .Sum(d => DrinkVolumes.TryGetValue(d.DrinkName, out var v) ? v : 200);
+    int EstimatedHydrationMl => DiaryService.EstimateHydrationMl(
+        (currentLog?.Events ?? []).SelectMany(e => e.DrinkEntries));
 
     int TotalDrinksCount => (currentLog?.Events ?? [])
         .Sum(e => e.DrinkEntries.Count);
+
+    int FilledMealsCount => (currentLog?.Events ?? [])
+        .Count(e => e.EventType == DayEventType.Meal);
 
     int TotalActivityMinutes => (currentLog?.Events ?? [])
         .Where(e => e.EventType == DayEventType.Activity && e.DurationMinutes.HasValue)
@@ -389,6 +967,33 @@ else
 
     int TotalActivityCount => (currentLog?.Events ?? [])
         .Count(e => e.EventType == DayEventType.Activity);
+
+    // Total kcal estimé de la journée (aliments des repas reliés au référentiel Ciqual).
+    double DayKcalTotal => (currentLog?.Events ?? [])
+        .Where(e => e.EventType == DayEventType.Meal)
+        .SelectMany(e => e.FoodEntries)
+        .Select(f => DiaryService.EstimateKcal(f))
+        .Where(k => k != null)
+        .Sum(k => k!.Value);
+
+    static string FormatDayKcal(double kcal) =>
+        kcal <= 0 ? "—" : $"≈ {kcal:0}";
+
+    // kcal dépensées : somme des saisies utilisateur sur les activités du jour.
+    int TotalBurnedKcal => (currentLog?.Events ?? [])
+        .Where(e => e.EventType == DayEventType.Activity && e.CaloriesBurned.HasValue)
+        .Sum(e => e.CaloriesBurned!.Value);
+
+    // Bilan = ingérées − sport − métabolisme de base (MB seul, pas MB×activité :
+    // le sport saisi est déjà compté, le facteur d'activité le compterait en double).
+    string FormatKcalBalance()
+    {
+        var eaten = DayKcalTotal;
+        var burned = TotalBurnedKcal;
+        if (eaten <= 0 && burned <= 0) return "—";
+        var diff = eaten - burned - (ProfileBmr ?? 0);
+        return $"{(diff >= 0 ? "+" : "−")}{Math.Abs(diff):0}";
+    }
 
     static string FormatHydration(int ml) =>
         ml == 0 ? "—" : ml >= 1000 ? $"≈ {ml / 1000.0:0.#} L" : $"≈ {ml} ml";
@@ -398,28 +1003,106 @@ else
         minutes >= 60 ? $"{minutes / 60}h{(minutes % 60 > 0 ? $" {minutes % 60}min" : "")}" :
         $"{minutes} min";
 
-    DayEvent? GetMealSlotEvent(int slotIndex)
-        => currentLog?.Events.FirstOrDefault(e => e.MealSlot == slotIndex);
-
-    IEnumerable<DayEvent> GetActivitiesBeforeAll()
-        => (currentLog?.Events ?? [])
-            .Where(e => e.EventType == DayEventType.Activity
-                     && e.ActivityAfterSlot == null
-                     && !e.ConcurrentWithMealSlot.HasValue)
-            .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt);
-
-    IEnumerable<DayEvent> GetActivitiesAfterSlot(int? afterSlot)
-        => (currentLog?.Events ?? [])
-            .Where(e => e.EventType == DayEventType.Activity
-                     && e.ActivityAfterSlot == afterSlot
-                     && !e.ConcurrentWithMealSlot.HasValue)
-            .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt);
-
     IReadOnlyList<DayEvent> GetConcurrentActivities(int slotIdx)
         => (currentLog?.Events ?? [])
             .Where(e => e.EventType == DayEventType.Activity && e.ConcurrentWithMealSlot == slotIdx)
             .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt)
             .ToList();
+
+    static readonly IReadOnlyList<DayEvent> EmptyActivities = [];
+
+    record FriseRow(DayEvent? Event, int? EmptySlot);
+
+    IEnumerable<FriseRow> GetFriseRows()
+    {
+        var rows = new List<(TimeOnly sortTime, FriseRow row)>();
+
+        for (int i = 0; i < DiaryService.MealSlots.Length; i++)
+        {
+            var slot = DiaryService.MealSlots[i];
+            var mealEvent = currentLog?.Events.FirstOrDefault(e => e.MealSlot == i);
+            var sortTime = mealEvent?.Time ?? slot.DefaultTime;
+            rows.Add((sortTime, new FriseRow(mealEvent, mealEvent == null ? i : null)));
+        }
+
+        foreach (var act in (currentLog?.Events ?? [])
+            .Where(e => e.EventType == DayEventType.Activity && !e.ConcurrentWithMealSlot.HasValue))
+        {
+            rows.Add((act.Time ?? TimeOnly.MinValue, new FriseRow(act, null)));
+        }
+
+        return rows.OrderBy(r => r.sortTime).Select(r => r.row);
+    }
+
+    async Task UpdateEventTime(DayEvent evt, ChangeEventArgs e)
+    {
+        if (TimeOnly.TryParse(e.Value?.ToString(), out var time))
+        {
+            try
+            {
+                await DiaryService.UpdateEventTimeAsync(evt.Id, time);
+                await LoadDay();
+                Toast.ShowSaved();
+            }
+            catch
+            {
+                Toast.ShowError("Enregistrement impossible — vérifiez votre connexion.");
+            }
+        }
+    }
+
+    // ── Jalons vides ───────────────────────────────────────────────────────────
+    // Un clic crée l'événement et ouvre directement l'éditeur standard (plus de
+    // formulaire intermédiaire ni d'expansion au survol). Un jalon refermé sans
+    // aucune saisie est supprimé par le balayage de LoadDay et redevient fantôme.
+
+    async Task OpenSlot(int slotIdx)
+    {
+        currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
+        var evt = await DiaryService.GetOrCreateMealSlotEventAsync(currentLog.Id, slotIdx);
+        editingEventId = evt.Id;
+        await LoadDay();
+    }
+
+    // Vierge = aucune saisie ET libellé/heure d'origine ET aucune activité simultanée.
+    bool IsUntouchedSlotEvent(DayEvent evt)
+    {
+        if (evt is not { EventType: DayEventType.Meal, MealSlot: not null }) return false;
+        var slot = DiaryService.MealSlots[evt.MealSlot.Value];
+        return evt.FoodEntries.Count == 0 && evt.DrinkEntries.Count == 0 && evt.Photos.Count == 0
+            && evt.HungerBefore == null && evt.SatietyAfter == null
+            && string.IsNullOrWhiteSpace(evt.Emotions) && string.IsNullOrWhiteSpace(evt.Sensations)
+            && (string.IsNullOrWhiteSpace(evt.Label) || evt.Label == slot.Label)
+            && (evt.Time == null || evt.Time == slot.DefaultTime)
+            && GetConcurrentActivities(evt.MealSlot.Value).Count == 0;
+    }
+
+    TimeOnly GetRowTime(FriseRow row)
+    {
+        if (row.Event?.Time != null) return row.Event.Time.Value;
+        if (row.Event?.MealSlot != null) return DiaryService.MealSlots[row.Event.MealSlot.Value].DefaultTime;
+        return row.EmptySlot.HasValue ? DiaryService.MealSlots[row.EmptySlot.Value].DefaultTime : TimeOnly.MinValue;
+    }
+
+    TimeOnly CalcInsertTime(FriseRow? prev, FriseRow? next)
+    {
+        var p = prev != null ? GetRowTime(prev) : (TimeOnly?)null;
+        var n = next != null ? GetRowTime(next) : (TimeOnly?)null;
+        if (p == null && n == null) return new TimeOnly(12, 0);
+        if (p == null) return n!.Value.AddMinutes(-30);
+        if (n == null) return p.Value.AddMinutes(30);
+        var mid = (p.Value.ToTimeSpan().TotalMinutes + n.Value.ToTimeSpan().TotalMinutes) / 2.0;
+        return new TimeOnly((int)(mid / 60) % 24, (int)mid % 60);
+    }
+
+    async Task InsertActivity(TimeOnly betweenTime)
+    {
+        currentLog ??= await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
+        var act = await DiaryService.AddActivityAfterSlotAsync(currentLog.Id, null);
+        await DiaryService.UpdateEventTimeAsync(act.Id, betweenTime);
+        editingEventId = act.Id;
+        await LoadDay();
+    }
 
     static string SlotBorderClass(int idx) => idx switch
     {

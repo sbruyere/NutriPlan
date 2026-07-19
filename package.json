@@ -1,0 +1,26 @@
+{
+  "name": "nutriplan",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "css:build": "npx @tailwindcss/cli -i ./wwwroot/tailwind-input.css -o ./wwwroot/tailwind.css --minify",
+    "css:watch": "npx @tailwindcss/cli -i ./wwwroot/tailwind-input.css -o ./wwwroot/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sbruyere/NutriPlan.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sbruyere/NutriPlan/issues"
+  },
+  "homepage": "https://github.com/sbruyere/NutriPlan#readme",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "tailwindcss": "^4.3.0"
+  }
+}

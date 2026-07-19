@@ -2,8 +2,21 @@
 @inject DiaryService DiaryService
 @inject DiarySessionService Session
 @inject NavigationManager Nav
+@inject BrowserTimeService Time
+@inject IJSRuntime JS
 
 <PageTitle>Carnet patient — NutriPlan</PageTitle>
+
+@if (lightboxUrl != null)
+{
+    <div class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center cursor-zoom-out"
+         @onclick="() => lightboxUrl = null">
+        <img src="@lightboxUrl" alt="Photo du repas" class="max-w-[92vw] max-h-[90vh] object-contain rounded-2xl shadow-2xl" />
+        <button aria-label="Fermer la photo"
+                class="absolute top-4 right-5 text-snow text-3xl opacity-70 hover:opacity-100 p-1.5"
+                @onclick="() => lightboxUrl = null">✕</button>
+    </div>
+}
 
 @if (!Session.IsNutritionistLoggedIn)
 {
@@ -17,22 +30,47 @@ else
 {
     <div class="space-y-5">
         <div class="flex items-center justify-between flex-wrap gap-3">
-            <div class="flex items-center gap-3">
-                <a href="/nutritionniste/tableau-de-bord" class="text-gray-400 hover:text-gray-600 transition-colors text-xl">←</a>
+            <div class="flex items-center gap-2">
+                <a href="/nutritionniste/tableau-de-bord" aria-label="Retour au tableau de bord"
+                   class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors print:hidden">
+                    <Icon Name="arrow-left" Class="w-5 h-5" />
+                </a>
                 <div>
-                    <h1 class="text-xl font-bold text-gray-800">@(diary.PatientAlias ?? "Patient anonyme")</h1>
+                    <h1 class="font-display text-2xl font-extrabold text-carbon">@(diary.PatientAlias ?? "Patient anonyme")</h1>
                     <p class="text-xs font-mono text-gray-400">
-                        @diary.AccessCode · Depuis le @diary.CreatedAt.ToString("d MMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                        @diary.AccessCode · Depuis le @diary.CreatedAt.ToString("d MMM yyyy", Fr)
                     </p>
                 </div>
             </div>
-            <div class="flex gap-2">
-                <button @onclick="() => showHistory = !showHistory"
-                        class="text-sm text-primary-600 border border-primary-200 hover:border-primary-400 px-3 py-1.5 rounded-lg transition-colors">
+            <div class="flex items-center gap-2 flex-wrap print:hidden">
+                @if (!showHistory && !showReport)
+                {
+                    <div class="flex bg-slate-100 rounded-md p-0.5 text-[11px] font-medium" role="group" aria-label="Mode d'affichage">
+                        <button @onclick="() => tableView = true"
+                                class="px-2.5 py-1 rounded transition-colors @(tableView ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">
+                            Tableau
+                        </button>
+                        <button @onclick="() => tableView = false"
+                                class="px-2.5 py-1 rounded transition-colors @(!tableView ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">
+                            Frise
+                        </button>
+                    </div>
+                }
+                <button @onclick="PrintDay" aria-label="Imprimer la journée"
+                        class="p-2 rounded-lg border border-gray-200 text-gray-500 hover:text-primary-600 transition-colors">
+                    <Icon Name="printer" Class="w-4 h-4" />
+                </button>
+                <button @onclick="ToggleReport"
+                        class="text-sm px-3 py-1.5 rounded-lg transition-colors @(showReport ? "bg-carbon text-volt font-bold" : "text-primary-600")">
+                    Rapport
+                </button>
+                <button @onclick="() => { showHistory = !showHistory; if (showHistory) showReport = false; }"
+                        class="text-sm text-primary-600 px-3 py-1.5 rounded-lg transition-colors">
                     @(showHistory ? "Vue journée" : "Historique")
                 </button>
                 <button @onclick="() => showDeleteConfirm = true"
-                        class="text-sm text-red-500 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors">
+                        aria-label="Supprimer ce carnet patient"
+                        class="text-sm text-red-500 px-3 py-1.5 rounded-lg transition-colors">
                     Supprimer
                 </button>
             </div>
@@ -40,32 +78,210 @@ else
 
         @if (!string.IsNullOrEmpty(diary.Notes))
         {
-            <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-700">
+            <div class="bg-amber-50 rounded-xl px-4 py-3 text-sm text-amber-700">
                 <strong>Notes :</strong> @diary.Notes
             </div>
         }
 
-        @if (!showHistory)
+        @if (showHistory)
         {
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center justify-between">
-                <button @onclick="PreviousDay" class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">←</button>
-                <div class="text-center">
-                    <p class="font-semibold text-gray-800 capitalize">
-                        @selectedDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+            <NutritionistHistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
+        }
+        else if (showReport)
+        {
+            @if (report == null)
+            {
+                <div class="text-gray-400 text-center py-12">Calcul du rapport…</div>
+            }
+            else
+            {
+                var r = report;
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <h2 class="font-display text-lg font-extrabold text-carbon">Rapport de consultation</h2>
+                        <div class="flex bg-slate-100 rounded-md p-0.5 text-[11px] font-medium print:hidden" role="group" aria-label="Période du rapport">
+                            @foreach (var period in new[] { 7, 30, 90 }) { var pd = period;
+                                <button @onclick="async () => await SetReportDays(pd)"
+                                        class="px-2.5 py-1 rounded transition-colors @(reportDays == pd ? "bg-white shadow-sm text-gray-700" : "text-gray-400")">@pd j</button>
+                            }
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-gray-400 -mt-2">
+                        @r.DaysWithData jour(s) renseigné(s) sur @r.TotalDays · @r.MealCount repas ·
+                        @((int)(r.FoodsLinkedShare * 100)) % des aliments reliés au référentiel Ciqual@(r.FoodsLinkedShare < 0.5 && r.MealCount > 0 ? " — moyennes énergétiques sous-estimées" : "")
                     </p>
-                    @if (selectedDate == DateOnly.FromDateTime(DateTime.Today))
+
+                    <!-- Moyennes énergie & macros — bloc charbon signature -->
+                    <div class="bg-carbon rounded-xl p-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
+                        <div class="flex items-center gap-1.5 mb-3">
+                            <span class="w-1.5 h-1.5 bg-volt" aria-hidden="true"></span>
+                            <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">Moyennes par jour renseigné</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-4">
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold leading-none tabular-nums @(KcalOverTarget ? "text-[#ff8a75]" : "text-volt")">@F0(r.AvgKcal)</p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Kcal@(diary.DailyKcalTarget is int kt ? $" · plafond {kt}" : "")</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@F0(r.AvgProteinG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Protéines@(ProteinPerKg is double pkg ? $" · {pkg:0.0} g/kg" : "")</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@F0(r.AvgCarbsG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Glucides</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@F0(r.AvgFatG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Lipides</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold leading-none tabular-nums @(r.AvgSugarsG > 100 ? "text-[#ff8a75]" : "text-volt")">@F0(r.AvgSugarsG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Sucres · &lt; 100 g</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold leading-none tabular-nums @(SatFatSharePct > 12 ? "text-[#ffc46b]" : "text-volt")">@F0(r.AvgSatFatG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">AG saturés@(SatFatSharePct is double sfp ? $" · {sfp:0} % AET" : "")</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold leading-none tabular-nums @(r.AvgFiberG < 25 && r.AvgFiberG != null ? "text-[#ffc46b]" : "text-volt")">@F1(r.AvgFiberG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Fibres · ≥ 30 g</p>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-display text-xl font-extrabold leading-none tabular-nums @(r.AvgSaltG > 5 ? "text-[#ff8a75]" : "text-volt")">@F1(r.AvgSaltG)<span class="text-[11px] text-snow ml-0.5">g</span></p>
+                                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Sel · &lt; 5 g (OMS)</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comportement alimentaire -->
+                    <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                        <h3 class="font-display text-[13px] font-extrabold text-carbon mb-3">Comportement alimentaire</h3>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-3 text-[13px]">
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@r.AvgMealsPerDay.ToString("0.#")</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Repas / jour</p></div>
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@F1(r.AvgHunger) → @F1(r.AvgSatiety)</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Faim → Rassasié moy.</p></div>
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@(r.AvgEatingWindowHours is double w ? $"{w:0.#} h" : "—")</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Fenêtre alimentaire</p></div>
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@r.BreakfastSkippedDays j</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Petit-déj. sauté</p></div>
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@r.EmotionalMealCount</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Repas émotionnels*</p></div>
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@(r.AvgHydrationMl is double hy ? (hy >= 1000 ? $"≈ {hy / 1000:0.#} L" : $"≈ {hy:0} ml") : "—")</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Hydratation / j</p></div>
+                            <div><p class="font-display font-extrabold text-carbon tabular-nums">@(r.TotalActivityMinutes >= 60 ? $"{r.TotalActivityMinutes / 60}h{(r.TotalActivityMinutes % 60 > 0 ? $" {r.TotalActivityMinutes % 60}" : "")}" : $"{r.TotalActivityMinutes} min")@(r.TotalBurnedKcal > 0 ? $" · {r.TotalBurnedKcal} kcal" : "")</p><p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Activité (période)</p></div>
+                            <div>
+                                <p class="font-display font-extrabold text-carbon">@(r.TopEmotions.Count > 0 ? string.Join(" · ", r.TopEmotions.Select(e => $"{e.Emotion} ×{e.Count}")) : "—")</p>
+                                <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Émotions fréquentes</p>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-3">* Repas pris avec une faim ≤ 3 et au moins une émotion négative renseignée.</p>
+                    </div>
+
+                    <!-- Corrélations sensations ↔ aliments -->
+                    <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                        <h3 class="font-display text-[13px] font-extrabold text-carbon mb-1">Corrélations sensations ↔ aliments <span class="text-gray-400 font-bold text-[11px]">(90 derniers jours)</span></h3>
+                        <p class="text-[10px] text-gray-400 mb-3">Association sur le même repas — une corrélation n'est pas une causalité, à interpréter cliniquement.</p>
+                        @if (r.Correlations.Count == 0)
+                        {
+                            <p class="text-[13px] text-gray-400">Pas assez de données : il faut des sensations renseignées régulièrement et des aliments récurrents (≥ 4 repas).</p>
+                        }
+                        else
+                        {
+                            <div class="space-y-1.5">
+                                @foreach (var corr in r.Correlations)
+                                {
+                                    <div class="flex items-baseline gap-2 text-[13px]">
+                                        <span class="bg-[#eff3f6] rounded-[5px] px-1.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#69737d] flex-shrink-0">@corr.Symptom</span>
+                                        <span class="font-bold text-carbon min-w-0">@corr.FoodLabel</span>
+                                        @if (corr.Scope == "groupe") { <span class="text-[9px] text-gray-400 uppercase font-bold flex-shrink-0">groupe</span> }
+                                        <span class="ml-auto text-[11.5px] text-gray-500 tabular-nums flex-shrink-0 text-right">
+                                            @corr.SymptomMeals/@corr.MealsWithFood repas (@((int)(corr.RateWith * 100)) %) vs @((int)(corr.RateWithout * 100)) % sans · <span class="font-extrabold text-carbon">×@corr.Lift.ToString("0.#")</span>
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Points d'attention -->
+                    <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                        <h3 class="font-display text-[13px] font-extrabold text-carbon mb-2.5">Points d'attention</h3>
+                        @{ var flags = ReportFlags(); }
+                        @if (flags.Count == 0)
+                        {
+                            <p class="text-[13px] text-gray-400">Aucun point d'attention majeur sur la période. 👍</p>
+                        }
+                        else
+                        {
+                            <ul class="space-y-1.5">
+                                @foreach (var flag in flags)
+                                {
+                                    <li class="flex items-baseline gap-2 text-[13px] text-gray-600">
+                                        <span class="w-2 h-2 rounded-full flex-shrink-0 translate-y-px" style="background:@flag.Color"></span>
+                                        @flag.Text
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <!-- Navigation de date -->
+            <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-3 flex items-center justify-between">
+                <button @onclick="PreviousDay" aria-label="Jour précédent"
+                        class="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors print:hidden">
+                    <Icon Name="chevron-left" Class="w-4 h-4" />
+                </button>
+                <div class="text-center">
+                    <p class="font-display font-extrabold text-carbon text-base">
+                        <span class="capitalize">@selectedDate.ToString("dddd", Fr)</span> @selectedDate.ToString("d MMMM yyyy", Fr)
+                    </p>
+                    @if (selectedDate == Time.Today)
                     {
-                        <span class="text-xs bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full">Aujourd'hui</span>
+                        <span class="inline-block text-[9px] font-extrabold uppercase tracking-[.14em] bg-carbon text-volt px-2 py-0.5 rounded-[4px] mt-0.5">Aujourd'hui</span>
                     }
                 </div>
-                <button @onclick="NextDay" disabled="@(selectedDate >= DateOnly.FromDateTime(DateTime.Today))"
-                        class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 text-gray-500 transition-colors">→</button>
+                <button @onclick="NextDay" disabled="@(selectedDate >= Time.Today)" aria-label="Jour suivant"
+                        class="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 text-gray-500 transition-colors print:hidden">
+                    <Icon Name="chevron-right" Class="w-4 h-4" />
+                </button>
             </div>
 
-            @if (currentLog == null || !currentLog.Events.Any())
+            <!-- Synthèse des 7 derniers jours — bloc charbon signature VOLT -->
+            <div class="bg-carbon rounded-xl p-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)] print:hidden">
+                <div class="flex items-center gap-1.5 mb-3">
+                    <span class="w-1.5 h-1.5 bg-volt" aria-hidden="true"></span>
+                    <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">7 derniers jours</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="min-w-0">
+                        <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@FilledDaysCount<span class="text-[11px] font-extrabold text-snow ml-0.5">/7</span></p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Jours remplis</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@WeekHydrationAvg</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Hydratation moy./j</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@WeekActivityTotal</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Activité totale</p>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@WeekHungerSatiety</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Faim / Rassasié moy.</p>
+                    </div>
+                </div>
+            </div>
+
+            @if (tableView)
             {
-                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-                    <p class="text-gray-300 text-sm">Aucune saisie pour ce jour.</p>
+                <!-- Vue tableau pleine largeur (identique côté patient) -->
+                <div style="width:100vw;margin-left:calc(50% - 50vw);padding:0 1rem;box-sizing:border-box;">
+                    <DiaryTableView DailyLog="@currentLog" DiaryId="@diary.Id" Date="@selectedDate" />
+                </div>
+            }
+            else if (currentLog == null || !currentLog.Events.Any())
+            {
+                <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-8 text-center">
+                    <p class="text-gray-400 text-sm">Aucune saisie pour ce jour.</p>
                 </div>
             }
             else
@@ -82,9 +298,9 @@ else
                         <div class="flex-1 @(group.Count() > 1 ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "")">
                             @foreach (var evt in group.OrderBy(e => e.EventType).ThenBy(e => e.CreatedAt))
                             {
-                                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] overflow-hidden">
                                     <div class="px-4 py-3 border-b border-gray-50 flex items-center gap-2 flex-wrap">
-                                        <span class="text-lg">@(evt.EventType == DayEventType.Activity ? "🏃" : "🍽️")</span>
+                                        <span class="text-lg" aria-hidden="true">@(evt.EventType == DayEventType.Activity ? "🏃" : "🍽️")</span>
                                         <span class="font-medium text-gray-700">@evt.Label</span>
                                         @if (evt.HungerBefore.HasValue)
                                         {
@@ -100,39 +316,7 @@ else
                                         }
                                     </div>
 
-                                    @if (evt.EventType == DayEventType.Meal)
-                                    {
-                                        @if (evt.FoodEntries.Count > 0)
-                                        {
-                                            <ul class="divide-y divide-gray-50">
-                                                @foreach (var entry in evt.FoodEntries)
-                                                {
-                                                    <li class="px-4 py-2.5">
-                                                        <p class="text-sm font-medium text-gray-800">@entry.FoodName</p>
-                                                        <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                                                            @if (!string.IsNullOrEmpty(entry.Quantity))
-                                                            {
-                                                                <span class="text-xs text-gray-500">📏 @entry.Quantity</span>
-                                                            }
-                                                            @if (!string.IsNullOrEmpty(entry.PreparationMethod))
-                                                            {
-                                                                <span class="text-xs text-gray-400 italic">🍳 @entry.PreparationMethod</span>
-                                                            }
-                                                        </div>
-                                                    </li>
-                                                }
-                                            </ul>
-                                        }
-                                        @if (!string.IsNullOrEmpty(evt.Sensations))
-                                        {
-                                            <div class="px-4 py-2.5 bg-orange-50 border-t border-orange-100">
-                                                <p class="text-xs text-orange-600">
-                                                    <span class="font-medium">Sensations :</span> @evt.Sensations
-                                                </p>
-                                            </div>
-                                        }
-                                    }
-                                    else
+                                    @if (evt.EventType == DayEventType.Activity && (evt.DurationMinutes.HasValue || !string.IsNullOrEmpty(evt.Intensity) || !string.IsNullOrEmpty(evt.ActivityNotes)))
                                     {
                                         <div class="px-4 py-3 space-y-1">
                                             <div class="flex items-center gap-3 flex-wrap">
@@ -151,67 +335,174 @@ else
                                             }
                                         </div>
                                     }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                }
 
-                @if (!string.IsNullOrEmpty(currentLog.Hydration) || !string.IsNullOrEmpty(currentLog.Emotions) || !string.IsNullOrEmpty(currentLog.GeneralNotes))
-                {
-                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                        <h3 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <span>📊</span> Bilan de la journée
-                        </h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                            @if (!string.IsNullOrEmpty(currentLog.Hydration))
-                            {
-                                <div class="bg-blue-50 rounded-xl p-3">
-                                    <p class="text-xs font-medium text-blue-400 mb-1">💧 Hydratation</p>
-                                    <p class="text-blue-700">@currentLog.Hydration</p>
-                                </div>
-                            }
-                            @if (!string.IsNullOrEmpty(currentLog.Emotions))
-                            {
-                                <div class="bg-purple-50 rounded-xl p-3">
-                                    <p class="text-xs font-medium text-purple-400 mb-1">🧘 Émotions / Stress</p>
-                                    <p class="text-purple-700">@currentLog.Emotions</p>
+                                    @* Aliments : d'abord les non groupés, puis chaque composition *@
+                                    @if (evt.FoodEntries.Count > 0)
+                                    {
+                                        <div class="px-4 py-2.5 space-y-1.5">
+                                            @if (UngroupedFoods(evt).Any())
+                                            {
+                                                <ul class="space-y-1">
+                                                    @foreach (var entry in UngroupedFoods(evt))
+                                                    {
+                                                        <li>
+                                                            <p class="text-sm font-medium text-gray-800">@entry.FoodName</p>
+                                                            <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                                                @if (!string.IsNullOrEmpty(FormatQty(entry)))
+                                                                {
+                                                                    <span class="text-xs text-gray-500">📏 @FormatQty(entry)</span>
+                                                                }
+                                                                @if (!string.IsNullOrEmpty(entry.PreparationMethod))
+                                                                {
+                                                                    <span class="text-xs text-gray-400 italic">🍳 @entry.PreparationMethod</span>
+                                                                }
+                                                            </div>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            }
+                                            @foreach (var grp in GroupedFoods(evt))
+                                            {
+                                                <div>
+                                                    <p class="text-xs font-semibold text-gray-500">🍽 @grp.Key</p>
+                                                    <ul class="ml-3 space-y-0.5 mt-0.5">
+                                                        @foreach (var entry in grp.OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt))
+                                                        {
+                                                            <li class="flex items-baseline gap-1.5 text-sm text-gray-700 leading-snug">
+                                                                <span class="text-gray-300 flex-shrink-0" aria-hidden="true">└</span>
+                                                                <span>@entry.FoodName</span>
+                                                                @if (!string.IsNullOrEmpty(FormatQty(entry)))
+                                                                {
+                                                                    <span class="text-xs text-gray-500">@FormatQty(entry)</span>
+                                                                }
+                                                                @if (!string.IsNullOrEmpty(entry.PreparationMethod))
+                                                                {
+                                                                    <span class="text-xs text-gray-400 italic">@entry.PreparationMethod</span>
+                                                                }
+                                                            </li>
+                                                        }
+                                                    </ul>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+
+                                    @* Boissons : chips bleues groupées par nom *@
+                                    @if (evt.DrinkEntries.Count > 0)
+                                    {
+                                        <div class="px-4 py-2 border-t border-gray-50 flex flex-wrap gap-1 items-center">
+                                            <span class="text-xs text-gray-400 mr-1">💧</span>
+                                            @foreach (var (dname, dcount) in DrinkGroups(evt.DrinkEntries))
+                                            {
+                                                <span class="bg-blue-50 text-blue-600 text-xs px-2 py-0.5 rounded-full whitespace-nowrap">
+                                                    @(dcount > 1 ? $"{dcount}× " : "")@dname
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+
+                                    @* Photos : miniatures cliquables → lightbox *@
+                                    @if (evt.Photos.Count > 0)
+                                    {
+                                        <div class="px-4 py-2 border-t border-gray-50 flex flex-wrap gap-1.5">
+                                            @foreach (var ph in evt.Photos)
+                                            {
+                                                var p = ph;
+                                                <button @onclick="() => lightboxUrl = p.FilePath" aria-label="Agrandir la photo du repas"
+                                                        class="rounded-lg overflow-hidden hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary-300 focus:outline-none transition-opacity">
+                                                    <img src="@p.FilePath" alt="Photo du repas" class="w-12 h-12 object-cover rounded-lg" />
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (evt.EventType == DayEventType.Meal)
+                                    {
+                                        @if (!string.IsNullOrEmpty(evt.Sensations))
+                                        {
+                                            <div class="px-4 py-2.5 bg-orange-50 border-t border-orange-100">
+                                                <p class="text-xs text-orange-600">
+                                                    <span class="font-medium">Sensations :</span> @evt.Sensations
+                                                </p>
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(evt.Emotions))
+                                        {
+                                            <div class="px-4 py-2.5 bg-purple-50 border-t border-purple-100">
+                                                <p class="text-xs text-purple-700">
+                                                    <span class="font-medium text-purple-500">Émotions :</span> @evt.Emotions
+                                                </p>
+                                            </div>
+                                        }
+                                    }
                                 </div>
                             }
                         </div>
-                        @if (!string.IsNullOrEmpty(currentLog.GeneralNotes))
-                        {
-                            <div class="mt-3 bg-gray-50 rounded-xl p-3">
-                                <p class="text-xs font-medium text-gray-400 mb-1">📝 Notes</p>
-                                <p class="text-sm text-gray-600">@currentLog.GeneralNotes</p>
-                            </div>
-                        }
                     </div>
                 }
             }
-        }
-        else
-        {
-            <NutritionistHistoryView DiaryId="@diary.Id" OnDateSelected="SelectDate" />
+
+            <!-- Bilan de la journée (dans les deux modes) -->
+            @if (currentLog != null && (currentLog.Events.Any() || !string.IsNullOrEmpty(currentLog.Hydration) || !string.IsNullOrEmpty(currentLog.Emotions) || !string.IsNullOrEmpty(currentLog.GeneralNotes)))
+            {
+                <div class="bg-white rounded-lg shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                    <h3 class="font-display font-semibold text-gray-700 mb-3 flex items-center gap-2 text-[15px]">
+                        <span aria-hidden="true">📊</span> Bilan de la journée
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <div class="bg-blue-50 rounded-lg px-3 py-2">
+                            <p class="text-[10px] text-blue-400 font-medium mb-0.5">💧 Hydratation estimée</p>
+                            <p class="text-base font-bold text-blue-700 leading-tight">@FormatHydration(DayHydrationMl)</p>
+                            <p class="text-[10px] text-blue-400">@DayDrinksCount prise(s)</p>
+                        </div>
+                        <div class="bg-emerald-50 rounded-lg px-3 py-2">
+                            <p class="text-[10px] text-emerald-500 font-medium mb-0.5">🏃 Activité</p>
+                            <p class="text-base font-bold text-emerald-700 leading-tight">@FormatActivity(DayActivityMinutes)</p>
+                            <p class="text-[10px] text-emerald-500">@DayActivityCount activité(s)</p>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(currentLog.Hydration))
+                    {
+                        <div class="bg-blue-50/60 rounded-xl p-3 mb-3">
+                            <p class="text-xs font-medium text-blue-400 mb-1">💧 Hydratation (saisie libre)</p>
+                            <p class="text-sm text-blue-700">@currentLog.Hydration</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(currentLog.Emotions))
+                    {
+                        <div class="bg-purple-50 rounded-xl p-3 mb-3">
+                            <p class="text-xs font-medium text-purple-400 mb-1">🧘 Émotions / Stress</p>
+                            <p class="text-sm text-purple-700">@currentLog.Emotions</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(currentLog.GeneralNotes))
+                    {
+                        <div class="bg-gray-50 rounded-xl p-3">
+                            <p class="text-xs font-medium text-gray-400 mb-1">📝 Notes</p>
+                            <p class="text-sm text-gray-600">@currentLog.GeneralNotes</p>
+                        </div>
+                    }
+                </div>
+            }
         }
     </div>
 
     @if (showDeleteConfirm)
     {
         <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
-                <div class="text-4xl mb-3">⚠️</div>
-                <h3 class="font-semibold text-gray-800 mb-2">Supprimer ce carnet ?</h3>
-                <p class="text-sm text-gray-400 mb-6">
-                    Toutes les entrées de <strong>@diary.PatientAlias</strong> seront supprimées définitivement.
+            <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center" role="dialog" aria-modal="true" aria-labelledby="delete-diary-title">
+                <div class="text-4xl mb-3" aria-hidden="true">⚠️</div>
+                <h3 id="delete-diary-title" class="font-semibold text-gray-800 mb-2">Supprimer ce carnet ?</h3>
+                <p class="text-sm text-gray-500 mb-6">
+                    Toutes les entrées de <strong>@(diary.PatientAlias ?? "ce patient")</strong> seront supprimées définitivement.
                 </p>
                 <div class="flex gap-3">
-                    <button @onclick="() => showDeleteConfirm = false"
+                    <button @onclick="() => showDeleteConfirm = false" aria-label="Annuler la suppression"
                             class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition-colors">
                         Annuler
                     </button>
-                    <button @onclick="ConfirmDelete"
-                            class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                    <button @onclick="ConfirmDelete" aria-label="Confirmer la suppression du carnet"
+                            class="flex-1 bg-red-500 hover:bg-red-600 text-snow py-2.5 rounded-xl text-sm font-medium transition-colors">
                         Supprimer
                     </button>
                 </div>
@@ -223,35 +514,177 @@ else
 @code {
     [Parameter] public string AccessCode { get; set; } = "";
 
+    static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
+
     FoodDiary? diary;
     DailyLog? currentLog;
-    DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Today);
+    List<DailyLog> weekLogs = [];
+    DateOnly selectedDate;
     bool showHistory, showDeleteConfirm;
+    bool tableView = true; // le tableau est la vue de travail du professionnel
+    string? lightboxUrl;
+
+    // ── Rapport de consultation ─────────────────────────────────────────────
+    bool showReport;
+    int reportDays = 30;
+    DiaryService.NutritionReport? report;
+
+    async Task ToggleReport()
+    {
+        showReport = !showReport;
+        if (showReport) { showHistory = false; await LoadReport(); }
+    }
+
+    async Task SetReportDays(int days)
+    {
+        reportDays = days;
+        report = null;
+        await LoadReport();
+    }
+
+    async Task LoadReport() =>
+        report = await DiaryService.GetNutritionReportAsync(diary!.Id, Time.Today, reportDays);
+
+    static string F0(double? v) => v is double d ? d.ToString("0") : "—";
+    static string F1(double? v) => v is double d ? d.ToString("0.#") : "—";
+
+    // Part des AG saturés dans l'énergie (repère : ≤ 12 % de l'apport énergétique)
+    double? SatFatSharePct =>
+        report is { AvgSatFatG: double satFat, AvgKcal: double kcalAvg } && kcalAvg > 0
+            ? satFat * 9 / kcalAvg * 100 : null;
+
+    double? ProteinPerKg =>
+        report?.AvgProteinG is double prot && diary?.WeightKg is double kg && kg > 0 ? prot / kg : null;
+
+    bool KcalOverTarget => diary?.DailyKcalTarget is int t && t > 0 && report?.AvgKcal is double k && k > t;
+
+    List<(string Text, string Color)> ReportFlags()
+    {
+        var flags = new List<(string, string)>();
+        if (report is not { } r || r.DaysWithData == 0) return flags;
+        const string red = "#e05d4b", orange = "#e09a3e", purple = "#8b6bd9", gray = "#9aa4ad";
+        if (r.AvgSaltG is double salt && salt > 5) flags.Add(($"Sel moyen {salt:0.#} g/j — au-dessus du repère OMS (< 5 g)", red));
+        if (r.AvgSugarsG is double sugar && sugar > 100) flags.Add(($"Sucres moyens {sugar:0} g/j — au-dessus du repère ANSES (< 100 g)", red));
+        if (r.AvgFiberG is double fiber && fiber < 25) flags.Add(($"Fibres moyennes {fiber:0.#} g/j — en dessous des 30 g recommandés", orange));
+        if (SatFatSharePct is double sfShare && sfShare > 12) flags.Add(($"AG saturés ≈ {sfShare:0} % de l'énergie — au-dessus du repère (≤ 12 %)", orange));
+        if (KcalOverTarget && diary?.DailyKcalTarget is int target) flags.Add(($"Apport moyen {r.AvgKcal:0} kcal/j — au-dessus du plafond fixé ({target})", red));
+        if (r.DaysWithData >= 5 && r.BreakfastSkippedDays * 100 / r.DaysWithData >= 40) flags.Add(($"Petit-déjeuner sauté {r.BreakfastSkippedDays} j sur {r.DaysWithData}", orange));
+        if (r.EmotionalMealCount >= 3) flags.Add(($"{r.EmotionalMealCount} repas pris avec faim faible et émotions négatives — piste d'alimentation émotionnelle", purple));
+        if (r.MealCount > 0 && r.FoodsLinkedShare < 0.5) flags.Add(($"Seuls {(int)(r.FoodsLinkedShare * 100)} % des aliments sont reliés au référentiel — les moyennes nutritionnelles sont sous-estimées", gray));
+        return flags;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Recharge la session persistée avant toute lecture de l'état de connexion.
+        await Session.EnsureLoadedAsync();
+        selectedDate = await Time.TodayAsync();
+    }
 
     protected override async Task OnParametersSetAsync()
     {
+        await Session.EnsureLoadedAsync();
         if (!Session.IsNutritionistLoggedIn) { Nav.NavigateTo("/nutritionniste/connexion"); return; }
         diary = await DiaryService.GetDiaryByCodeAsync(AccessCode.ToUpperInvariant());
         if (diary == null || diary.NutritionistId != Session.NutritionistId) { Nav.NavigateTo("/nutritionniste/tableau-de-bord"); return; }
         await LoadDay();
     }
 
-    async Task LoadDay() => currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
+    async Task LoadDay()
+    {
+        currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
+        weekLogs = await DiaryService.GetRecentLogsFullAsync(diary.Id, selectedDate, 7);
+    }
 
     async Task PreviousDay() { selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
 
     async Task NextDay()
     {
-        if (selectedDate < DateOnly.FromDateTime(DateTime.Today)) { selectedDate = selectedDate.AddDays(1); await LoadDay(); }
+        if (selectedDate < Time.Today) { selectedDate = selectedDate.AddDays(1); await LoadDay(); }
     }
 
-    void SelectDate(DateOnly date) { selectedDate = date; showHistory = false; _ = LoadDay(); }
+    async Task SelectDate(DateOnly date) { selectedDate = date; showHistory = false; await LoadDay(); }
+
+    async Task PrintDay() => await JS.InvokeVoidAsync("nutriplan.print");
 
     async Task ConfirmDelete()
     {
         await DiaryService.DeleteDiaryAsync(diary!.Id);
         Nav.NavigateTo("/nutritionniste/tableau-de-bord");
     }
+
+    // ── Bilan de la journée ──────────────────────────────────────────────────
+
+    int DayHydrationMl => currentLog == null ? 0
+        : DiaryService.EstimateHydrationMl(currentLog.Events.SelectMany(e => e.DrinkEntries));
+
+    int DayDrinksCount => currentLog?.Events.Sum(e => e.DrinkEntries.Count) ?? 0;
+
+    int DayActivityMinutes => (currentLog?.Events ?? [])
+        .Where(e => e.EventType == DayEventType.Activity && e.DurationMinutes.HasValue)
+        .Sum(e => e.DurationMinutes!.Value);
+
+    int DayActivityCount => (currentLog?.Events ?? [])
+        .Count(e => e.EventType == DayEventType.Activity);
+
+    // ── Synthèse 7 derniers jours ────────────────────────────────────────────
+
+    int FilledDaysCount => weekLogs.Count(l => l.Events.Count > 0);
+
+    string WeekHydrationAvg
+    {
+        get
+        {
+            var filled = weekLogs.Where(l => l.Events.Count > 0).ToList();
+            if (filled.Count == 0) return "—";
+            var avg = (int)Math.Round(filled.Average(l =>
+                (double)DiaryService.EstimateHydrationMl(l.Events.SelectMany(e => e.DrinkEntries))));
+            return FormatHydration(avg);
+        }
+    }
+
+    string WeekActivityTotal => FormatActivity(weekLogs
+        .SelectMany(l => l.Events)
+        .Where(e => e.EventType == DayEventType.Activity && e.DurationMinutes.HasValue)
+        .Sum(e => e.DurationMinutes!.Value));
+
+    string WeekHungerSatiety
+    {
+        get
+        {
+            var events = weekLogs.SelectMany(l => l.Events).ToList();
+            var hunger = events.Where(e => e.HungerBefore.HasValue).Select(e => (double)e.HungerBefore!.Value).ToList();
+            var satiety = events.Where(e => e.SatietyAfter.HasValue).Select(e => (double)e.SatietyAfter!.Value).ToList();
+            if (hunger.Count == 0 && satiety.Count == 0) return "—";
+            var h = hunger.Count > 0 ? hunger.Average().ToString("0.0", Fr) : "—";
+            var s = satiety.Count > 0 ? satiety.Average().ToString("0.0", Fr) : "—";
+            return $"{h} / {s}";
+        }
+    }
+
+    static string FormatHydration(int ml) =>
+        ml == 0 ? "—" : ml >= 1000 ? $"≈ {(ml / 1000.0).ToString("0.#", Fr)} L" : $"≈ {ml} ml";
+
+    static string FormatActivity(int minutes) =>
+        minutes == 0 ? "—" :
+        minutes >= 60 ? $"{minutes / 60}h{minutes % 60:00}" :
+        $"{minutes} min";
+
+    // ── Aides d'affichage ────────────────────────────────────────────────────
+
+    static IEnumerable<FoodEntry> UngroupedFoods(DayEvent evt) =>
+        evt.FoodEntries.Where(f => string.IsNullOrEmpty(f.GroupName)).OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt);
+
+    static IEnumerable<IGrouping<string, FoodEntry>> GroupedFoods(DayEvent evt) =>
+        evt.FoodEntries.Where(f => !string.IsNullOrEmpty(f.GroupName)).OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt).GroupBy(f => f.GroupName!);
+
+    static string FormatQty(FoodEntry f) =>
+        !string.IsNullOrEmpty(f.QuantityUnit)
+            ? string.Join(" ", new[] { f.Quantity, f.QuantityUnit }.Where(s => !string.IsNullOrEmpty(s)))
+            : f.Quantity ?? "";
+
+    static IEnumerable<(string Name, int Count)> DrinkGroups(ICollection<DrinkEntry> entries) =>
+        entries.GroupBy(d => d.DrinkName).Select(g => (g.Key, g.Count()));
 
     static string ScoreBadge(int score) => score switch
     {

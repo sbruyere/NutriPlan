@@ -1,115 +1,90 @@
 @page "/creer-carnet"
 @inject DiaryService DiaryService
+@inject DiarySessionService Session
 @inject NavigationManager Nav
+@inject ToastService Toast
 
 <PageTitle>Créer un carnet — NutriPlan</PageTitle>
 
 <div class="max-w-sm mx-auto py-6">
     <div class="mb-4">
-        <a href="/" class="text-primary-600 hover:underline text-xs flex items-center gap-1 text-gray-400 hover:text-primary-600 transition-colors">
+        <a href="/" class="text-gray-400 hover:text-primary-600 text-xs flex items-center gap-1 transition-colors">
             ← Retour
         </a>
     </div>
 
-    @if (createdDiary == null)
-    {
-        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
-            <div class="text-center mb-5">
-                <div class="text-3xl mb-1.5">📓</div>
-                <h1 class="text-lg font-bold text-gray-800">Nouveau carnet alimentaire</h1>
-                <p class="text-gray-400 text-xs mt-1">Aucun compte requis — totalement anonyme</p>
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="text-center mb-5">
+            <div class="w-10 h-10 rounded-xl bg-carbon flex items-center justify-center mx-auto mb-2 shadow-sm">
+                <Icon Name="leaf" Class="w-5 h-5 text-volt" StrokeWidth="2" />
             </div>
-
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">
-                        Code PIN <span class="text-gray-300 font-normal">(optionnel)</span>
-                    </label>
-                    <input @bind="pin" type="password" placeholder="4 à 8 chiffres pour protéger votre carnet"
-                           class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 border-0 placeholder-gray-300"
-                           maxlength="8" />
-                    <p class="text-gray-400 text-[10px] mt-1">Laissez vide pour un accès sans protection.</p>
-                </div>
-
-                @if (!string.IsNullOrEmpty(pin))
-                {
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">
-                            Confirmer le PIN
-                        </label>
-                        <input @bind="pinConfirm" type="password" placeholder="Répétez votre PIN"
-                               class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 border-0 placeholder-gray-300"
-                               maxlength="8" />
-                    </div>
-                }
-
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="bg-red-50 text-red-600 text-xs rounded-lg px-3 py-2">
-                        @errorMessage
-                    </div>
-                }
-
-                <button @onclick="Create" disabled="@isLoading"
-                        class="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white py-2 rounded-lg text-sm font-medium transition-colors">
-                    @(isLoading ? "Création en cours…" : "Créer mon carnet")
-                </button>
-            </div>
+            <h1 class="font-display text-xl font-semibold text-gray-800">Nouveau carnet alimentaire</h1>
+            <p class="text-gray-400 text-xs mt-1">Aucun compte requis — totalement anonyme</p>
         </div>
-    }
-    else
-    {
-        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 text-center">
-            <div class="text-4xl mb-3">🎉</div>
-            <h2 class="text-base font-bold text-gray-800 mb-1.5">Votre carnet est prêt !</h2>
-            <p class="text-gray-400 text-xs mb-5">
-                Notez ce code — c'est votre seul moyen d'accéder à votre carnet.
-            </p>
 
-            <div class="bg-primary-50 border border-primary-200 rounded-xl px-5 py-3 mb-4 inline-block">
-                <p class="text-[10px] text-primary-400 font-medium mb-1 tracking-widest">VOTRE CODE D'ACCÈS</p>
-                <p class="text-2xl font-bold text-primary-700 tracking-widest">@createdDiary.AccessCode</p>
+        <div class="space-y-3">
+            <div>
+                <label for="pin-carnet" class="block text-xs font-medium text-gray-500 mb-1">
+                    Code PIN <span class="text-gray-400 font-normal">(optionnel)</span>
+                </label>
+                <input id="pin-carnet" @bind="pin" @bind:event="oninput" @onkeyup="OnKeyUp"
+                       type="password" inputmode="numeric" autocomplete="new-password"
+                       placeholder="4 à 8 chiffres pour protéger votre carnet"
+                       class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 border-0 placeholder-gray-400"
+                       maxlength="8" />
+                <p class="text-gray-500 text-[11px] mt-1">
+                    Laissez vide pour un accès sans protection. Attention : si vous perdez votre PIN, votre carnet sera inaccessible.
+                    Vous pourrez définir ou changer le PIN plus tard depuis le panneau « Partager » du carnet.
+                </p>
             </div>
 
-            @if (createdDiary.PinHash != null)
+            @if (!string.IsNullOrEmpty(errorMessage))
             {
-                <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4">
-                    🔒 Votre carnet est protégé par un code PIN.
-                </div>
+                <div class="bg-red-50 text-red-600 text-xs rounded-lg px-3 py-2" role="alert">@errorMessage</div>
             }
 
-            <button @onclick="GoToDiary"
-                    class="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
-                Ouvrir mon carnet →
+            <button @onclick="Create" disabled="@isLoading"
+                    class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-2.5 rounded-lg text-sm font-medium transition-colors">
+                @(isLoading ? "Création en cours…" : "Créer mon carnet →")
             </button>
         </div>
-    }
+    </div>
 </div>
 
 @code {
     string pin = "";
-    string pinConfirm = "";
     string errorMessage = "";
     bool isLoading = false;
-    FoodDiary? createdDiary;
 
     async Task Create()
     {
-        errorMessage = "";
+        if (isLoading) return;
 
-        if (!string.IsNullOrEmpty(pin))
+        errorMessage = "";
+        if (!string.IsNullOrEmpty(pin) && !System.Text.RegularExpressions.Regex.IsMatch(pin, @"^\d{4,8}$"))
         {
-            if (pin.Length < 4) { errorMessage = "Le PIN doit comporter au moins 4 chiffres."; return; }
-            if (pin != pinConfirm) { errorMessage = "Les codes PIN ne correspondent pas."; return; }
+            errorMessage = "Le PIN doit comporter 4 à 8 chiffres.";
+            return;
         }
 
         isLoading = true;
-        createdDiary = await DiaryService.CreateAnonymousDiaryAsync(string.IsNullOrEmpty(pin) ? null : pin);
-        isLoading = false;
+        try
+        {
+            var diary = await DiaryService.CreateAnonymousDiaryAsync(string.IsNullOrEmpty(pin) ? null : pin);
+
+            // Auto-unlock : l'utilisateur ne ressaisit pas son PIN à la première ouverture
+            await Session.UnlockAsync(diary.AccessCode, DiarySessionService.PinStamp(diary.PinHash));
+            Nav.NavigateTo($"/carnet/{diary.AccessCode}/journal?nouveau=true");
+        }
+        catch
+        {
+            Toast.ShowError("La création du carnet a échoué. Veuillez réessayer.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
-    void GoToDiary()
-    {
-        Nav.NavigateTo($"/carnet/{createdDiary!.AccessCode}/journal");
-    }
+    async Task OnKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await Create(); }
 }

@@ -1,0 +1,30 @@
+@implements IDisposable
+@inject ToastService ToastService
+
+<div class="fixed bottom-4 inset-x-0 z-[70] flex flex-col items-center gap-2 px-4 pointer-events-none print:hidden"
+     aria-live="polite">
+    @foreach (var toast in ToastService.Toasts)
+    {
+        <div @key="toast.Id" role="@(toast.Kind == ToastKind.Error ? "alert" : "status")"
+             class="pointer-events-auto flex items-center gap-2 rounded-full shadow-lg px-4 py-2 text-sm font-medium
+                    @(toast.Kind == ToastKind.Error
+                        ? "bg-red-600 text-snow"
+                        : "bg-gray-900/90 text-snow")">
+            <span aria-hidden="true">@(toast.Kind == ToastKind.Error ? "⚠️" : "✓")</span>
+            <span>@toast.Text</span>
+            @if (toast.Kind == ToastKind.Error)
+            {
+                <button @onclick="() => ToastService.Dismiss(toast.Id)" aria-label="Fermer la notification"
+                        class="ml-1 text-snow/70 hover:text-snow text-lg leading-none">×</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => ToastService.OnChange += HandleChange;
+
+    void HandleChange() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => ToastService.OnChange -= HandleChange;
+}

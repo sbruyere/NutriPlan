@@ -20,6 +20,9 @@ public class DayEvent
     // Activity
     public int? DurationMinutes { get; set; }
     [MaxLength(50)] public string? Intensity { get; set; }
+    public int? CaloriesBurned { get; set; }        // kcal dépensées pendant l'activité (saisie utilisateur)
+    public double? DistanceKm { get; set; }         // distance parcourue (optionnel)
+    public int? ElevationM { get; set; }            // dénivelé positif en mètres (optionnel)
     [MaxLength(500)] public string? ActivityNotes { get; set; }
     public int? MealSlot { get; set; }               // 0-5 pour les jalons prédéfinis, null sinon
     public int? ActivityAfterSlot { get; set; }      // activité entre jalons : après le jalon N (null = avant le 1er)
