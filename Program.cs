@@ -8,8 +8,26 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// ── Stockage persistant ─────────────────────────────────────────────────────
+// Azure App Service REMPLACE le dossier de déploiement à chaque publication :
+// tout fichier absent du paquet (base SQLite, photos) y serait supprimé.
+// %HOME%\data survit aux déploiements → la base et les uploads y vivent en prod.
+// En local, on garde le dossier du projet et wwwroot/uploads comme avant.
+var isAzure = Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME") != null
+              && Environment.GetEnvironmentVariable("HOME") is not null;
+var dataDir = isAzure
+    ? Path.Combine(Environment.GetEnvironmentVariable("HOME")!, "data", "nutriplan")
+    : builder.Environment.ContentRootPath;
+var uploadsDir = isAzure
+    ? Path.Combine(dataDir, "uploads")
+    : Path.Combine(builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"), "uploads");
+Directory.CreateDirectory(dataDir);
+Directory.CreateDirectory(uploadsDir);
+NutriPlan.Services.AppPaths.UploadsDir = uploadsDir;
+
 builder.Services.AddDbContextFactory<NutriPlanContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=nutriplan.db"));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? $"Data Source={Path.Combine(dataDir, "nutriplan.db")}"));
 
 builder.Services.AddScoped<DiarySessionService>();
 builder.Services.AddScoped<DiaryService>();
@@ -117,6 +135,15 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+// Les photos uploadées vivent hors du dossier de déploiement (stockage persistant)
+// et sont créées au runtime : MapStaticAssets ne les sert pas, ce middleware oui.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
+    RequestPath = "/uploads",
+});
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();

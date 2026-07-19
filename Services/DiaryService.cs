@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Processing;
 
 namespace NutriPlan.Services;
 
-public class DiaryService(IDbContextFactory<NutriPlanContext> factory, IWebHostEnvironment env)
+public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
 {
     public static readonly (string Label, string Icon, TimeOnly DefaultTime)[] MealSlots =
     [
@@ -439,7 +439,7 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory, IWebHostE
     public async Task<MealPhoto> AddPhotoAsync(int dayEventId, Stream imageStream, string fileName)
     {
         var safeName = $"{Guid.NewGuid()}.jpg";
-        var uploadsDir = Path.Combine(env.WebRootPath, "uploads");
+        var uploadsDir = AppPaths.UploadsDir;
         Directory.CreateDirectory(uploadsDir);
         var fullPath = Path.Combine(uploadsDir, safeName);
 
@@ -472,7 +472,7 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory, IWebHostE
         await using var ctx = await factory.CreateDbContextAsync();
         var photo = await ctx.MealPhotos.FindAsync(photoId);
         if (photo == null) return;
-        var fullPath = Path.Combine(env.WebRootPath, photo.FilePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        var fullPath = Path.Combine(AppPaths.UploadsDir, Path.GetFileName(photo.FilePath));
         if (File.Exists(fullPath)) File.Delete(fullPath);
         ctx.MealPhotos.Remove(photo);
         await ctx.SaveChangesAsync();
