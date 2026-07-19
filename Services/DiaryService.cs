@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using NutriPlan.Data;
 using NutriPlan.Data.Models;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 
 namespace NutriPlan.Services;
 
@@ -431,16 +433,27 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory, IWebHostE
         await ctx.SaveChangesAsync();
     }
 
+    // Les photos de téléphone font couramment 4-12 Mo : on accepte tout et on
+    // normalise ICI — orientation EXIF appliquée, côté max 1 600 px, ré-encodage
+    // JPEG qualité 82 (≈ 150-400 Ko par photo, quel que soit l'original).
     public async Task<MealPhoto> AddPhotoAsync(int dayEventId, Stream imageStream, string fileName)
     {
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        if (string.IsNullOrEmpty(ext)) ext = ".jpg";
-        var safeName = $"{Guid.NewGuid()}{ext}";
+        var safeName = $"{Guid.NewGuid()}.jpg";
         var uploadsDir = Path.Combine(env.WebRootPath, "uploads");
         Directory.CreateDirectory(uploadsDir);
         var fullPath = Path.Combine(uploadsDir, safeName);
-        await using (var fs = File.Create(fullPath))
-            await imageStream.CopyToAsync(fs);
+
+        using (var image = await SixLabors.ImageSharp.Image.LoadAsync(imageStream))
+        {
+            image.Mutate(op => op.AutoOrient());
+            if (image.Width > 1600 || image.Height > 1600)
+                image.Mutate(op => op.Resize(new SixLabors.ImageSharp.Processing.ResizeOptions
+                {
+                    Mode = SixLabors.ImageSharp.Processing.ResizeMode.Max,
+                    Size = new SixLabors.ImageSharp.Size(1600, 1600),
+                }));
+            await image.SaveAsJpegAsync(fullPath, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 82 });
+        }
         await using var ctx = await factory.CreateDbContextAsync();
         var photo = new MealPhoto
         {

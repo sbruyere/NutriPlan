@@ -24,15 +24,17 @@
             {
                 var idx = i;
                 var item = filtered[i];
+                @* Libellé sur plusieurs lignes : les noms Ciqual sont longs et doivent
+                   rester entièrement lisibles sur mobile (pas de troncature). *@
                 <button type="button" role="option" aria-selected="@(idx == highlighted ? "true" : "false")"
                         @onmousedown:preventDefault="true"
                         @onmousedown="async () => await Pick(item)"
-                        class="w-full text-left px-2.5 py-1.5 text-sm transition-colors flex items-baseline gap-2
+                        class="w-full text-left px-2.5 py-1.5 transition-colors
                                @(idx == highlighted ? "bg-primary-50 text-primary-800" : "text-gray-700 hover:bg-slate-50")">
-                    <span class="truncate">@item.Label</span>
+                    <span class="block text-sm leading-snug">@item.Label</span>
                     @if (item.Hint != null)
                     {
-                        <span class="ml-auto flex-shrink-0 text-[10px] text-gray-400">@item.Hint</span>
+                        <span class="block text-[10px] text-gray-400 mt-0.5">@item.Hint</span>
                     }
                 </button>
             }
