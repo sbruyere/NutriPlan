@@ -11,3 +11,4 @@ run.err.log
 wwwroot/uploads/
 node_modules/
 .claude/settings.local.json
+backups/

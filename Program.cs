@@ -25,9 +25,11 @@ Directory.CreateDirectory(dataDir);
 Directory.CreateDirectory(uploadsDir);
 NutriPlan.Services.AppPaths.UploadsDir = uploadsDir;
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? $"Data Source={Path.Combine(dataDir, "nutriplan.db")}";
+
 builder.Services.AddDbContextFactory<NutriPlanContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? $"Data Source={Path.Combine(dataDir, "nutriplan.db")}"));
+    options.UseSqlite(connectionString));
 
 builder.Services.AddScoped<DiarySessionService>();
 builder.Services.AddScoped<DiaryService>();
@@ -36,6 +38,39 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<BrowserTimeService>();
 
 var app = builder.Build();
+
+// ── Sauvegarde quotidienne de la base ───────────────────────────────────────
+// Filet de sécurité contre la corruption ou les mauvaises manipulations :
+// une copie par jour au démarrage (API de backup SQLite — sûre même avec WAL),
+// 7 sauvegardes conservées, AVANT toute migration de schéma. Un échec de
+// sauvegarde ne doit jamais empêcher l'application de démarrer.
+try
+{
+    var dbFile = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
+    if (File.Exists(dbFile))
+    {
+        var backupsDir = Path.Combine(dataDir, "backups");
+        Directory.CreateDirectory(backupsDir);
+        var backupFile = Path.Combine(backupsDir, $"nutriplan-{DateTime.UtcNow:yyyy-MM-dd}.db");
+        if (!File.Exists(backupFile))
+        {
+            using (var source = new Microsoft.Data.Sqlite.SqliteConnection(connectionString))
+            using (var target = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={backupFile}"))
+            {
+                source.Open();
+                target.Open();
+                source.BackupDatabase(target);
+            }
+            foreach (var oldBackup in Directory.GetFiles(backupsDir, "nutriplan-*.db").OrderByDescending(f => f).Skip(7))
+                File.Delete(oldBackup);
+            Console.WriteLine($"Sauvegarde quotidienne de la base : {backupFile}");
+        }
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Sauvegarde de la base impossible : {ex.Message}");
+}
 
 using (var scope = app.Services.CreateScope())
 {
