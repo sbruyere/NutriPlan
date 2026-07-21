@@ -380,6 +380,13 @@ else
                     {
                         <p class="inline-block text-[9px] font-extrabold uppercase tracking-[.14em] bg-carbon text-volt px-2 py-1 rounded-[4px] mt-1.5">Aujourd'hui</p>
                     }
+                    @if ((currentLog?.Events.Count ?? 0) > 0)
+                    {
+                        <button @onclick="OpenMoveDay"
+                                class="block text-[10px] font-semibold text-gray-400 hover:text-gray-600 mt-1.5 transition-colors print:hidden">
+                            ⇄ Déplacer cette journée…
+                        </button>
+                    }
                 </div>
                 <div class="flex items-center flex-shrink-0 print:hidden">
                     <button @onclick="PreviousDay" aria-label="Jour précédent"
@@ -392,6 +399,33 @@ else
                     </button>
                 </div>
             </div>
+
+            <!-- ── Déplacement d'une journée saisie sur la mauvaise date ──────── -->
+            @if (showMoveDay)
+            {
+                <div class="bg-white rounded-xl shadow-sm p-4 space-y-2.5 print:hidden">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold text-gray-700">Déplacer la journée</h3>
+                        <button @onclick="() => showMoveDay = false" aria-label="Fermer le panneau de déplacement"
+                                class="text-gray-400 hover:text-gray-600 text-lg leading-none p-1.5 -m-1.5 transition-colors">×</button>
+                    </div>
+                    <p class="text-[11px] text-gray-400 leading-relaxed">
+                        Tout le contenu du <b class="text-gray-600">@selectedDate.ToString("d MMMM", new System.Globalization.CultureInfo("fr-FR"))</b>
+                        (repas, activités, photos, notes) sera déplacé vers la date choisie.
+                        La date cible doit être un jour sans aucune saisie.
+                    </p>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <input type="date" @bind="moveTargetDate" max="@Time.Today.ToString("yyyy-MM-dd")"
+                               aria-label="Date de destination"
+                               class="bg-slate-50 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0" />
+                        <button @onclick="MoveDay"
+                                class="bg-volt hover:bg-volt-dark text-carbon px-3.5 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide transition-colors">
+                            Déplacer
+                        </button>
+                    </div>
+                    @if (moveError != null) { <p role="alert" class="text-red-500 text-xs">@moveError</p> }
+                </div>
+            }
 
             <!-- Bilan du jour — bloc charbon signature VOLT : chiffres volt, jauge 6 segments -->
             <div class="bg-carbon rounded-xl p-4 pb-3.5 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
@@ -921,6 +955,36 @@ else
         selectedDate = date;
         showHistory = false;
         await LoadDay();
+    }
+
+    // ── Déplacement d'une journée saisie sur la mauvaise date ───────────────
+    bool showMoveDay;
+    DateOnly moveTargetDate;
+    string? moveError;
+
+    void OpenMoveDay()
+    {
+        showMoveDay = !showMoveDay;
+        moveError = null;
+        moveTargetDate = selectedDate.AddDays(-1); // erreur typique : saisie sur le lendemain
+    }
+
+    async Task MoveDay()
+    {
+        moveError = null;
+        if (moveTargetDate == selectedDate) { moveError = "Choisissez une autre date que la journée actuelle."; return; }
+        if (moveTargetDate > Time.Today) { moveError = "Impossible de déplacer vers une date future."; return; }
+        try
+        {
+            var moved = await DiaryService.MoveDailyLogAsync(diary!.Id, selectedDate, moveTargetDate);
+            if (!moved) { moveError = "Cette date contient déjà des saisies — choisissez un jour vide."; return; }
+            showMoveDay = false;
+            editingEventId = null;
+            selectedDate = moveTargetDate; // on suit la journée déplacée
+            await LoadDay();
+            Toast.ShowSuccess("Journée déplacée ✓");
+        }
+        catch { Toast.ShowError(SaveError); }
     }
 
     async Task DeleteEvent(int eventId)

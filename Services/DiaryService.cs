@@ -328,6 +328,37 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
             .ToListAsync();
     }
 
+    // Déplace toute une journée (repas, activités, photos, notes) vers une date VIDE
+    // — pour corriger une saisie faite sur le mauvais jour. Refuse si la date cible
+    // contient déjà quelque chose : pas de fusion ni d'écrasement silencieux.
+    public async Task<bool> MoveDailyLogAsync(int diaryId, DateOnly from, DateOnly to)
+    {
+        if (from == to) return false;
+        await using var ctx = await factory.CreateDbContextAsync();
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        var source = await ctx.DailyLogs
+            .FirstOrDefaultAsync(l => l.FoodDiaryId == diaryId && l.Date == from);
+        if (source == null) return false;
+        var target = await ctx.DailyLogs.Include(l => l.Events)
+            .FirstOrDefaultAsync(l => l.FoodDiaryId == diaryId && l.Date == to);
+        if (target != null)
+        {
+            var targetEmpty = target.Events.Count == 0
+                && string.IsNullOrWhiteSpace(target.Hydration)
+                && string.IsNullOrWhiteSpace(target.Emotions)
+                && string.IsNullOrWhiteSpace(target.GeneralNotes);
+            if (!targetEmpty) return false;
+            // Log vide résiduel sur la cible : on le supprime pour libérer la date
+            // (index unique FoodDiaryId+Date) avant de déplacer la source.
+            ctx.DailyLogs.Remove(target);
+            await ctx.SaveChangesAsync();
+        }
+        source.Date = to;
+        await ctx.SaveChangesAsync();
+        await tx.CommitAsync();
+        return true;
+    }
+
     public async Task UpdateDailyLogSummaryAsync(int logId, string? hydration, string? emotions, string? notes)
     {
         await using var ctx = await factory.CreateDbContextAsync();
