@@ -203,14 +203,18 @@ app.MapGet("/strava/callback", async (string? code, string? state, string? error
     if (accessCode == "LOGIN")
     {
         if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code)) return Results.Redirect("/");
-        var diaryCode = await strava.FindDiaryByStravaLoginAsync(code!);
-        return Results.Redirect(diaryCode == null ? "/?strava=unknown" : $"/carnet/{diaryCode}/journal");
+        var login = await strava.FindDiaryByStravaLoginAsync(code!);
+        return Results.Redirect(login == null
+            ? "/?strava=unknown"
+            : $"/carnet/{login.Value.AccessCode}/journal?sat={login.Value.Ticket}");
     }
 
-    var ok = false;
+    string? ticket = null;
     if (string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code))
-        ok = await strava.ConnectAsync(accessCode, code);
-    return Results.Redirect($"/carnet/{accessCode}/journal?strava={(ok ? "ok" : "failed")}");
+        ticket = await strava.ConnectAsync(accessCode, code);
+    return Results.Redirect(ticket == null
+        ? $"/carnet/{accessCode}/journal?strava=failed"
+        : $"/carnet/{accessCode}/journal?strava=ok&sat={ticket}");
 });
 
 app.MapRazorComponents<App>()

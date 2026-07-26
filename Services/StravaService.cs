@@ -58,11 +58,35 @@ public class StravaService(
 
     record PrimaryPhotoDto([property: JsonPropertyName("urls")] Dictionary<string, string>? Urls);
 
+    // ── Billets de connexion à usage unique ──────────────────────────────────
+    // Le callback OAuth (HTTP pur) ne peut pas écrire dans la session du navigateur :
+    // il émet un billet court que la page du journal consomme pour prouver que
+    // l'authentification Strava vient réellement d'aboutir (un simple paramètre
+    // d'URL forgé ne suffit pas).
+
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int DiaryId, DateTime Expires)> loginTickets = new();
+
+    static string IssueLoginTicket(int diaryId)
+    {
+        foreach (var stale in loginTickets.Where(t => t.Value.Expires < DateTime.UtcNow).Select(t => t.Key).ToList())
+            loginTickets.TryRemove(stale, out _);
+        var ticket = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+        loginTickets[ticket] = (diaryId, DateTime.UtcNow.AddMinutes(2));
+        return ticket;
+    }
+
+    public bool TryConsumeLoginTicket(string? ticket, int diaryId) =>
+        !string.IsNullOrEmpty(ticket)
+        && loginTickets.TryRemove(ticket!, out var entry)
+        && entry.DiaryId == diaryId
+        && entry.Expires >= DateTime.UtcNow;
+
     // ── Connexion / déconnexion ──────────────────────────────────────────────
 
-    public async Task<bool> ConnectAsync(string accessCode, string code)
+    // Lie le compte Strava au carnet ; retourne un billet de connexion (ou null si échec).
+    public async Task<string?> ConnectAsync(string accessCode, string code)
     {
-        if (!IsConfigured) return false;
+        if (!IsConfigured) return null;
         var token = await RequestTokenAsync(new Dictionary<string, string>
         {
             ["client_id"] = ClientId!,
@@ -70,17 +94,17 @@ public class StravaService(
             ["code"] = code,
             ["grant_type"] = "authorization_code",
         });
-        if (token == null) return false;
+        if (token == null) return null;
 
         await using var ctx = await factory.CreateDbContextAsync();
         var diary = await ctx.FoodDiaries.FirstOrDefaultAsync(d => d.AccessCode == accessCode);
-        if (diary == null) return false;
+        if (diary == null) return null;
         diary.StravaAthleteId = token.Athlete?.Id;
         diary.StravaAccessToken = token.AccessToken;
         diary.StravaRefreshToken = token.RefreshToken;
         diary.StravaTokenExpiresAt = token.ExpiresAt;
         await ctx.SaveChangesAsync();
-        return true;
+        return IssueLoginTicket(diary.Id);
     }
 
     // Supprime toutes les activités importées de Strava (et leurs photos), et remet
@@ -106,9 +130,9 @@ public class StravaService(
     }
 
     // Authentification « Se connecter avec Strava » : échange le code OAuth et
-    // retrouve le carnet lié à cet athlète. Retourne son code d'accès, ou null.
+    // retrouve le carnet lié à cet athlète. Retourne (code d'accès, billet), ou null.
     // Le PIN éventuel du carnet reste demandé ensuite (Strava remplace le code, pas le PIN).
-    public async Task<string?> FindDiaryByStravaLoginAsync(string code)
+    public async Task<(string AccessCode, string Ticket)?> FindDiaryByStravaLoginAsync(string code)
     {
         if (!IsConfigured) return null;
         var token = await RequestTokenAsync(new Dictionary<string, string>
@@ -132,7 +156,7 @@ public class StravaService(
         diary.StravaRefreshToken = token.RefreshToken;
         diary.StravaTokenExpiresAt = token.ExpiresAt;
         await ctx.SaveChangesAsync();
-        return diary.AccessCode;
+        return (diary.AccessCode, IssueLoginTicket(diary.Id));
     }
 
     public async Task DisconnectAsync(int diaryId)

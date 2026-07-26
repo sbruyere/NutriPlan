@@ -55,6 +55,23 @@ else if (showPinForm)
         </div>
     </div>
 }
+else if (showStravaGate)
+{
+    <!-- Carnet lié à Strava : le code d'accès seul ne suffit plus -->
+    <div class="max-w-sm mx-auto py-8">
+        <div class="bg-white rounded-xl shadow-sm p-5 text-center">
+            <div class="text-3xl mb-1.5">🔒</div>
+            <h2 class="font-display text-lg font-semibold text-gray-800">Carnet protégé par Strava</h2>
+            <p class="text-gray-400 text-xs mt-1 mb-4">
+                Ce carnet est lié à un compte Strava : confirmez que c'est bien vous pour y accéder.
+            </p>
+            <a href="@StravaLoginUrl"
+               class="inline-block bg-[#fc4c02] hover:bg-[#e34402] text-snow px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                Se connecter avec Strava
+            </a>
+        </div>
+    </div>
+}
 else
 {
     <div class="space-y-3">
@@ -755,8 +772,11 @@ else
 
     // ── Strava ──────────────────────────────────────────────────────────────
     bool stravaSyncing;
+    bool showStravaGate;
+    string? pendingStravaTicket;
 
     string StravaAuthorizeUrl => Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", AccessCode);
+    string StravaLoginUrl => Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", "login");
 
     async Task SyncStrava()
     {
@@ -816,6 +836,8 @@ else
         await Strava.DisconnectAsync(diary.Id);
         diary.StravaAthleteId = null; diary.StravaAccessToken = null;
         diary.StravaRefreshToken = null; diary.StravaTokenExpiresAt = null; diary.StravaLastSyncAt = null;
+        // L'empreinte d'accès redevient PIN seul : re-déverrouiller la session en place.
+        await Session.UnlockAsync(diary.AccessCode, DiarySessionService.AccessStamp(diary.PinHash, null));
         Toast.ShowSaved("Strava déconnecté");
     }
 
@@ -991,7 +1013,10 @@ else
         // le JS interop est disponible dès l'initialisation.
         selectedDate = await Time.TodayAsync();
 
-        // Retour du callback OAuth Strava : informer, puis nettoyer l'URL.
+        // Retour du callback OAuth Strava : récupérer le billet AVANT de nettoyer l'URL.
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        if (query.TryGetValue("sat", out var satValues)) pendingStravaTicket = satValues.ToString();
+
         if (Nav.Uri.Contains("strava=ok"))
         {
             Toast.ShowSuccess("Strava connecté ✓");
@@ -1002,19 +1027,36 @@ else
             Toast.ShowError("Connexion Strava échouée — vérifiez la configuration et réessayez.");
             Nav.NavigateTo($"/carnet/{AccessCode}/journal", replace: true);
         }
+        else if (pendingStravaTicket != null)
+        {
+            Nav.NavigateTo($"/carnet/{AccessCode}/journal", replace: true);
+        }
     }
 
     protected override async Task OnParametersSetAsync()
     {
         await Session.EnsureLoadedAsync();
         if (IsNew) showNewBanner = true;
-        isLoading = true; showPinForm = false; pinError = false;
+        isLoading = true; showPinForm = false; pinError = false; showStravaGate = false;
         var code = AccessCode.ToUpperInvariant();
         diary = await DiaryService.GetDiaryByCodeAsync(code);
         if (diary == null) { isLoading = false; return; }
-        var pinStamp = DiarySessionService.PinStamp(diary.PinHash);
-        if (diary.PinHash != null && !Session.IsUnlocked(code, pinStamp)) { showPinForm = true; isLoading = false; return; }
-        await Session.UnlockAsync(code, pinStamp); isLoading = false;
+
+        // Empreinte d'accès complète : PIN + compte Strava lié le cas échéant.
+        var stamp = DiarySessionService.AccessStamp(diary.PinHash, diary.StravaAthleteId);
+        if (!Session.IsUnlocked(code, stamp))
+        {
+            // Carnet lié à Strava : le code d'accès seul ne suffit plus — il faut la
+            // preuve du compte (billet émis par le callback OAuth), puis le PIN éventuel.
+            if (diary.StravaAthleteId != null && !Strava.TryConsumeLoginTicket(pendingStravaTicket, diary.Id))
+            {
+                pendingStravaTicket = null;
+                showStravaGate = true; isLoading = false; return;
+            }
+            pendingStravaTicket = null;
+            if (diary.PinHash != null) { showPinForm = true; isLoading = false; return; }
+        }
+        await Session.UnlockAsync(code, stamp); isLoading = false;
         assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
         LoadProfileFields();
         await LoadDay();
@@ -1027,7 +1069,7 @@ else
         var valid = await DiaryService.ValidatePinAsync(diary!.AccessCode, pinInput);
         if (valid)
         {
-            await Session.UnlockAsync(diary.AccessCode, DiarySessionService.PinStamp(diary.PinHash));
+            await Session.UnlockAsync(diary.AccessCode, DiarySessionService.AccessStamp(diary.PinHash, diary.StravaAthleteId));
             showPinForm = false;
             assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
         LoadProfileFields();

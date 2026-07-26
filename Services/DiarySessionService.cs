@@ -27,6 +27,14 @@ public class DiarySessionService(ProtectedLocalStorage storage)
         pinHash == null ? "open" : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pinHash)))[..16];
 
     /// <summary>
+    /// Empreinte d'accès complète du carnet : PIN + compte Strava lié le cas échéant.
+    /// Un carnet lié à Strava exige l'authentification Strava (le code seul ne suffit
+    /// plus) ; lier, changer ou délier le compte invalide les sessions existantes.
+    /// </summary>
+    public static string AccessStamp(string? pinHash, long? stravaAthleteId) =>
+        stravaAthleteId is long athleteId ? $"{PinStamp(pinHash)}|strava{athleteId}" : PinStamp(pinHash);
+
+    /// <summary>
     /// Recharge la session depuis le navigateur (une seule fois par circuit).
     /// À appeler avant toute lecture de IsUnlocked / IsNutritionistLoggedIn.
     /// Nécessite le JS interop — donc jamais pendant un prerender.
