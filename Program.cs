@@ -31,8 +31,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextFactory<NutriPlanContext>(options =>
     options.UseSqlite(connectionString));
 
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<DiarySessionService>();
 builder.Services.AddScoped<DiaryService>();
+builder.Services.AddScoped<NutriPlan.Services.StravaService>();
 builder.Services.AddScoped<NutritionistService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<BrowserTimeService>();
@@ -109,6 +111,12 @@ using (var scope = app.Services.CreateScope())
         "ALTER TABLE FoodDiaries ADD COLUMN ActivityLevel TEXT;",
         "ALTER TABLE FoodDiaries ADD COLUMN DailyKcalTarget INTEGER;",
         "ALTER TABLE FoodDiaries ADD COLUMN DailyBurnTarget INTEGER;",
+        "ALTER TABLE FoodDiaries ADD COLUMN StravaAthleteId INTEGER;",
+        "ALTER TABLE FoodDiaries ADD COLUMN StravaAccessToken TEXT;",
+        "ALTER TABLE FoodDiaries ADD COLUMN StravaRefreshToken TEXT;",
+        "ALTER TABLE FoodDiaries ADD COLUMN StravaTokenExpiresAt INTEGER;",
+        "ALTER TABLE FoodDiaries ADD COLUMN StravaLastSyncAt TEXT;",
+        "ALTER TABLE DayEvents ADD COLUMN StravaActivityId INTEGER;",
     })
     {
         try { ctx.Database.ExecuteSqlRaw(actCol); }
@@ -182,6 +190,18 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+// ── Callback OAuth Strava : échange du code puis retour au journal ──────────
+app.MapGet("/strava/callback", async (string? code, string? state, string? error,
+    NutriPlan.Services.StravaService strava) =>
+{
+    var accessCode = (state ?? "").Trim().ToUpperInvariant();
+    if (string.IsNullOrEmpty(accessCode)) return Results.Redirect("/");
+    if (string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code))
+        await strava.ConnectAsync(accessCode, code);
+    return Results.Redirect($"/carnet/{accessCode}/journal");
+});
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

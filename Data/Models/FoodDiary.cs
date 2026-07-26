@@ -30,6 +30,13 @@ public class FoodDiary
     public int? DailyKcalTarget { get; set; }                  // plafond d'apport journalier (kcal)
     public int? DailyBurnTarget { get; set; }                  // objectif de dépense sportive (kcal)
 
+    // ── Intégration Strava (OAuth par carnet) ──
+    public long? StravaAthleteId { get; set; }
+    public string? StravaAccessToken { get; set; }
+    public string? StravaRefreshToken { get; set; }
+    public long? StravaTokenExpiresAt { get; set; }            // epoch (secondes)
+    public DateTime? StravaLastSyncAt { get; set; }
+
     public int? NutritionistId { get; set; }
     public Nutritionist? Nutritionist { get; set; }
 

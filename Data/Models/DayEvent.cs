@@ -23,6 +23,7 @@ public class DayEvent
     public int? CaloriesBurned { get; set; }        // kcal dépensées pendant l'activité (saisie utilisateur)
     public double? DistanceKm { get; set; }         // distance parcourue (optionnel)
     public int? ElevationM { get; set; }            // dénivelé positif en mètres (optionnel)
+    public long? StravaActivityId { get; set; }     // activité importée de Strava (anti-doublon)
     [MaxLength(500)] public string? ActivityNotes { get; set; }
     public int? MealSlot { get; set; }               // 0-5 pour les jalons prédéfinis, null sinon
     public int? ActivityAfterSlot { get; set; }      // activité entre jalons : après le jalon N (null = avant le 1er)

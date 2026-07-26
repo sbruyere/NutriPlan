@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject NutritionistService NutritionistService
+@inject StravaService Strava
 @inject BrowserTimeService Time
 @inject ToastService Toast
 
@@ -150,6 +151,37 @@ else
                 {
                     <p class="text-[11px] text-gray-400">Renseignez sexe, taille, poids et année de naissance pour estimer votre métabolisme de base.</p>
                 }
+
+                <!-- ── Strava : import automatique des activités sportives ── -->
+                <div class="pt-2.5 border-t border-slate-100">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <p class="text-[11px] font-medium text-gray-400">🏃 Strava</p>
+                        @if (!Strava.IsConfigured)
+                        {
+                            <p class="text-[11px] text-gray-400">Non configuré côté serveur (paramètres Strava:ClientId / Strava:ClientSecret).</p>
+                        }
+                        else if (string.IsNullOrEmpty(diary!.StravaRefreshToken))
+                        {
+                            <a href="@StravaAuthorizeUrl"
+                               class="bg-[#fc4c02] hover:bg-[#e34402] text-snow px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                Connecter Strava
+                            </a>
+                        }
+                        else
+                        {
+                            <span class="text-[11px] text-gray-500">Connecté@(diary!.StravaLastSyncAt is DateTime lastSync ? $" · dernière synchro {lastSync.ToLocalTime():dd/MM HH:mm}" : "")</span>
+                            <button @onclick="SyncStrava" disabled="@stravaSyncing"
+                                    class="bg-volt hover:bg-volt-dark disabled:opacity-50 text-carbon px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide transition-colors">
+                                @(stravaSyncing ? "Synchro…" : "Synchroniser")
+                            </button>
+                            <button @onclick="DisconnectStrava"
+                                    class="text-[11px] text-gray-400 hover:text-red-500 transition-colors">
+                                Déconnecter
+                            </button>
+                        }
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Importe vos activités (titre, durée, distance, dénivelé, kcal) directement dans la frise.</p>
+                </div>
             </div>
         }
 
@@ -717,6 +749,53 @@ else
         catch { Toast.ShowError(SaveError); }
     }
 
+    // ── Strava ──────────────────────────────────────────────────────────────
+    bool stravaSyncing;
+
+    string StravaAuthorizeUrl => Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", AccessCode);
+
+    async Task SyncStrava()
+    {
+        if (stravaSyncing || diary == null) return;
+        stravaSyncing = true;
+        try
+        {
+            var (imported, error) = await Strava.SyncAsync(diary.Id);
+            if (error != null) { Toast.ShowError(error); return; }
+            diary.StravaLastSyncAt = DateTime.UtcNow;
+            Toast.ShowSuccess(imported == 0 ? "Aucune nouvelle activité Strava" : $"{imported} activité(s) Strava importée(s) ✓");
+            if (imported > 0) await LoadDay();
+        }
+        finally { stravaSyncing = false; }
+    }
+
+    // Synchro silencieuse à l'ouverture du carnet (au plus toutes les 12 h).
+    async Task AutoSyncStravaAsync()
+    {
+        if (diary == null || string.IsNullOrEmpty(diary.StravaRefreshToken)) return;
+        if (diary.StravaLastSyncAt is DateTime last && DateTime.UtcNow - last < TimeSpan.FromHours(12)) return;
+        try
+        {
+            var (imported, _) = await Strava.SyncAsync(diary.Id);
+            diary.StravaLastSyncAt = DateTime.UtcNow;
+            if (imported > 0)
+            {
+                Toast.ShowSuccess($"{imported} activité(s) Strava importée(s) ✓");
+                await LoadDay();
+            }
+        }
+        catch { /* la synchro auto ne doit jamais gêner l'ouverture du carnet */ }
+    }
+
+    async Task DisconnectStrava()
+    {
+        if (diary == null) return;
+        await Strava.DisconnectAsync(diary.Id);
+        diary.StravaAthleteId = null; diary.StravaAccessToken = null;
+        diary.StravaRefreshToken = null; diary.StravaTokenExpiresAt = null; diary.StravaLastSyncAt = null;
+        Toast.ShowSaved("Strava déconnecté");
+    }
+
     double? ProfileBmr => diary == null ? null : DiaryService.BasalMetabolicRate(diary, selectedDate.Year);
     double? ProfileNeeds => diary == null ? null : DiaryService.DailyEnergyNeeds(diary, selectedDate.Year);
     bool IntakeExceeded => diary?.DailyKcalTarget is int intakeT && intakeT > 0 && DayKcalTotal > intakeT;
@@ -904,6 +983,7 @@ else
         assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
         LoadProfileFields();
         await LoadDay();
+        await AutoSyncStravaAsync();
     }
 
     async Task ValidatePin()
@@ -917,6 +997,7 @@ else
             assignedNutri = await DiaryService.GetAssignedNutritionistAsync(diary.Id);
         LoadProfileFields();
             await LoadDay();
+            await AutoSyncStravaAsync();
         }
         else { pinError = true; }
     }
