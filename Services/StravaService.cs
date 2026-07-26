@@ -83,6 +83,28 @@ public class StravaService(
         return true;
     }
 
+    // Supprime toutes les activités importées de Strava (et leurs photos), et remet
+    // la synchro à zéro : un « Synchroniser » ré-importe les 30 derniers jours.
+    // Pour une suppression définitive, déconnecter le compte d'abord.
+    public async Task<int> DeleteImportedActivitiesAsync(int diaryId)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        var events = await ctx.DayEvents
+            .Include(e => e.Photos)
+            .Where(e => e.StravaActivityId != null && e.DailyLog.FoodDiaryId == diaryId)
+            .ToListAsync();
+        foreach (var photo in events.SelectMany(e => e.Photos))
+        {
+            var path = Path.Combine(AppPaths.UploadsDir, Path.GetFileName(photo.FilePath));
+            try { if (File.Exists(path)) File.Delete(path); } catch { /* fichier déjà absent */ }
+        }
+        ctx.DayEvents.RemoveRange(events); // les photos suivent en cascade
+        if (await ctx.FoodDiaries.FindAsync(diaryId) is { } diary)
+            diary.StravaLastSyncAt = null;
+        await ctx.SaveChangesAsync();
+        return events.Count;
+    }
+
     public async Task DisconnectAsync(int diaryId)
     {
         await using var ctx = await factory.CreateDbContextAsync();
@@ -98,9 +120,31 @@ public class StravaService(
 
     // ── Synchronisation des activités ────────────────────────────────────────
 
+    // Une seule synchro à la fois par carnet : l'auto-sync à l'ouverture et le
+    // bouton manuel (ou deux onglets) peuvent se chevaucher — sans verrou, les
+    // deux passes liraient les mêmes « déjà importés » et créeraient des doublons.
+    static readonly HashSet<int> syncing = [];
+
     // Importe les activités depuis la dernière synchro (fenêtre de rattrapage
     // de 24 h, 30 jours max au premier import). Anti-doublon par StravaActivityId.
     public async Task<(int Imported, string? Error)> SyncAsync(int diaryId)
+    {
+        lock (syncing)
+        {
+            if (syncing.Contains(diaryId)) return (0, null); // déjà en cours : ne rien relancer
+            syncing.Add(diaryId);
+        }
+        try
+        {
+            return await SyncCoreAsync(diaryId);
+        }
+        finally
+        {
+            lock (syncing) { syncing.Remove(diaryId); }
+        }
+    }
+
+    async Task<(int Imported, string? Error)> SyncCoreAsync(int diaryId)
     {
         if (!IsConfigured) return (0, "Strava n'est pas configuré côté serveur.");
         await using var ctx = await factory.CreateDbContextAsync();
@@ -139,6 +183,10 @@ public class StravaService(
         var imported = 0;
         foreach (var act in activities.Where(a => !knownIds.Contains(a.Id)).OrderBy(a => a.StartDateLocal))
         {
+            // Défense en profondeur (multi-instance, listes périmées) : re-vérifier en base.
+            if (await ctx.DayEvents.AnyAsync(e => e.StravaActivityId == act.Id && e.DailyLog.FoodDiaryId == diaryId))
+                continue;
+
             var date = DateOnly.FromDateTime(act.StartDateLocal);
             var log = await diaryService.GetOrCreateDailyLogAsync(diaryId, date);
 
