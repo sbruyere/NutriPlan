@@ -967,6 +967,18 @@ else
         // Date du jour côté client (fuseau du navigateur) — prerender désactivé,
         // le JS interop est disponible dès l'initialisation.
         selectedDate = await Time.TodayAsync();
+
+        // Retour du callback OAuth Strava : informer, puis nettoyer l'URL.
+        if (Nav.Uri.Contains("strava=ok"))
+        {
+            Toast.ShowSuccess("Strava connecté ✓");
+            Nav.NavigateTo($"/carnet/{AccessCode}/journal", replace: true);
+        }
+        else if (Nav.Uri.Contains("strava=failed"))
+        {
+            Toast.ShowError("Connexion Strava échouée — vérifiez la configuration et réessayez.");
+            Nav.NavigateTo($"/carnet/{AccessCode}/journal", replace: true);
+        }
     }
 
     protected override async Task OnParametersSetAsync()

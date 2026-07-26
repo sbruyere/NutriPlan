@@ -51,7 +51,12 @@ public class StravaService(
         [property: JsonPropertyName("total_elevation_gain")] double ElevationGain,
         [property: JsonPropertyName("sport_type")] string? SportType,
         [property: JsonPropertyName("start_date_local")] DateTime StartDateLocal,
-        [property: JsonPropertyName("calories")] double? Calories);
+        [property: JsonPropertyName("calories")] double? Calories,
+        [property: JsonPropertyName("photos")] PhotoSummaryDto? Photos);
+
+    record PhotoSummaryDto([property: JsonPropertyName("primary")] PrimaryPhotoDto? Primary);
+
+    record PrimaryPhotoDto([property: JsonPropertyName("urls")] Dictionary<string, string>? Urls);
 
     // ── Connexion / déconnexion ──────────────────────────────────────────────
 
@@ -137,19 +142,24 @@ public class StravaService(
             var date = DateOnly.FromDateTime(act.StartDateLocal);
             var log = await diaryService.GetOrCreateDailyLogAsync(diaryId, date);
 
-            // Les kcal ne sont que dans le détail de l'activité (appel par activité, plafonné).
+            // kcal et photo principale ne sont que dans le détail (appel par activité, plafonné).
             double? calories = null;
+            string? photoUrl = null;
             if (imported < MaxDetailCallsPerSync)
             {
                 try
                 {
                     var detail = await http.GetFromJsonAsync<ActivityDto>($"{ApiBase}/activities/{act.Id}");
                     calories = detail?.Calories;
+                    photoUrl = detail?.Photos?.Primary?.Urls?
+                        .OrderByDescending(u => int.TryParse(u.Key, out var size) ? size : 0)
+                        .Select(u => u.Value)
+                        .FirstOrDefault();
                 }
-                catch { /* kcal facultatives : l'import continue sans */ }
+                catch { /* kcal/photo facultatives : l'import continue sans */ }
             }
 
-            ctx.DayEvents.Add(new DayEvent
+            var evt = new DayEvent
             {
                 DailyLogId = log.Id,
                 EventType = DayEventType.Activity,
@@ -161,7 +171,21 @@ public class StravaService(
                 CaloriesBurned = calories is double kcal && kcal > 0 ? (int)Math.Round(kcal) : null,
                 StravaActivityId = act.Id,
                 CreatedAt = DateTime.UtcNow,
-            });
+            };
+            ctx.DayEvents.Add(evt);
+            await ctx.SaveChangesAsync(); // Id nécessaire pour rattacher la photo
+
+            if (photoUrl != null)
+            {
+                try
+                {
+                    // Le CDN Strava n'exige pas d'authentification : client nu.
+                    var bytes = await httpFactory.CreateClient().GetByteArrayAsync(photoUrl);
+                    using var ms = new MemoryStream(bytes);
+                    await diaryService.AddPhotoAsync(evt.Id, ms, "strava.jpg");
+                }
+                catch { /* photo facultative */ }
+            }
             imported++;
         }
 
@@ -178,11 +202,19 @@ public class StravaService(
         {
             var http = httpFactory.CreateClient();
             var resp = await http.PostAsync(TokenUrl, new FormUrlEncodedContent(form));
-            if (!resp.IsSuccessStatusCode) return null;
+            if (!resp.IsSuccessStatusCode)
+            {
+                // Le corps de l'erreur Strava dit précisément ce qui cloche
+                // (invalid client_secret, code déjà consommé…) : indispensable au diagnostic.
+                var body = await resp.Content.ReadAsStringAsync();
+                Console.WriteLine($"Strava token {form.GetValueOrDefault("grant_type")} : {(int)resp.StatusCode} {body}");
+                return null;
+            }
             return await resp.Content.ReadFromJsonAsync<TokenResponse>();
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"Strava token : exception {ex.Message}");
             return null;
         }
     }

@@ -197,9 +197,10 @@ app.MapGet("/strava/callback", async (string? code, string? state, string? error
 {
     var accessCode = (state ?? "").Trim().ToUpperInvariant();
     if (string.IsNullOrEmpty(accessCode)) return Results.Redirect("/");
+    var ok = false;
     if (string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code))
-        await strava.ConnectAsync(accessCode, code);
-    return Results.Redirect($"/carnet/{accessCode}/journal");
+        ok = await strava.ConnectAsync(accessCode, code);
+    return Results.Redirect($"/carnet/{accessCode}/journal?strava={(ok ? "ok" : "failed")}");
 });
 
 app.MapRazorComponents<App>()
