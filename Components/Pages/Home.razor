@@ -1,6 +1,7 @@
 @page "/"
 @inject NavigationManager Nav
 @inject DiaryService DiaryService
+@inject StravaService Strava
 
 <PageTitle>NutriPlan — Cahier de suivi alimentaire</PageTitle>
 
@@ -46,6 +47,20 @@
             {
                 <p class="text-red-500 text-xs mt-2" role="alert">Code introuvable. Vérifiez votre code d'accès.</p>
             }
+            @if (Strava.IsConfigured)
+            {
+                <a href="@Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", "login")"
+                   class="inline-flex items-center gap-1 text-xs font-bold text-[#fc4c02] hover:underline mt-2.5">
+                    Ou continuer avec Strava →
+                </a>
+            }
+            @if (stravaUnknown)
+            {
+                <p class="text-red-500 text-xs mt-2" role="alert">
+                    Aucun carnet n'est lié à ce compte Strava. Ouvrez votre carnet avec son code,
+                    puis connectez Strava dans le panneau Profil — la prochaine fois, un clic suffira.
+                </p>
+            }
         </div>
 
         <!-- Nouveau carnet -->
@@ -75,6 +90,10 @@
     string accessCode = "";
     bool notFound = false;
     bool isOpening = false;
+    bool stravaUnknown;
+
+    protected override void OnInitialized() =>
+        stravaUnknown = Nav.Uri.Contains("strava=unknown");
 
     async Task AccessDiary()
     {

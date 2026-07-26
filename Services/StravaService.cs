@@ -105,6 +105,36 @@ public class StravaService(
         return events.Count;
     }
 
+    // Authentification « Se connecter avec Strava » : échange le code OAuth et
+    // retrouve le carnet lié à cet athlète. Retourne son code d'accès, ou null.
+    // Le PIN éventuel du carnet reste demandé ensuite (Strava remplace le code, pas le PIN).
+    public async Task<string?> FindDiaryByStravaLoginAsync(string code)
+    {
+        if (!IsConfigured) return null;
+        var token = await RequestTokenAsync(new Dictionary<string, string>
+        {
+            ["client_id"] = ClientId!,
+            ["client_secret"] = ClientSecret!,
+            ["code"] = code,
+            ["grant_type"] = "authorization_code",
+        });
+        if (token?.Athlete == null) return null;
+
+        await using var ctx = await factory.CreateDbContextAsync();
+        var diary = await ctx.FoodDiaries
+            .Where(d => d.StravaAthleteId == token.Athlete.Id)
+            .OrderByDescending(d => d.Id) // si plusieurs carnets liés : le plus récent
+            .FirstOrDefaultAsync();
+        if (diary == null) return null;
+
+        // La connexion vient de renouveler les jetons : on en profite pour les stocker.
+        diary.StravaAccessToken = token.AccessToken;
+        diary.StravaRefreshToken = token.RefreshToken;
+        diary.StravaTokenExpiresAt = token.ExpiresAt;
+        await ctx.SaveChangesAsync();
+        return diary.AccessCode;
+    }
+
     public async Task DisconnectAsync(int diaryId)
     {
         await using var ctx = await factory.CreateDbContextAsync();

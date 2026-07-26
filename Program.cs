@@ -197,6 +197,16 @@ app.MapGet("/strava/callback", async (string? code, string? state, string? error
 {
     var accessCode = (state ?? "").Trim().ToUpperInvariant();
     if (string.IsNullOrEmpty(accessCode)) return Results.Redirect("/");
+
+    // state « login » = « Se connecter avec Strava » depuis l'accueil (les codes
+    // d'accès font 8 caractères : aucune collision possible).
+    if (accessCode == "LOGIN")
+    {
+        if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code)) return Results.Redirect("/");
+        var diaryCode = await strava.FindDiaryByStravaLoginAsync(code!);
+        return Results.Redirect(diaryCode == null ? "/?strava=unknown" : $"/carnet/{diaryCode}/journal");
+    }
+
     var ok = false;
     if (string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code))
         ok = await strava.ConnectAsync(accessCode, code);
