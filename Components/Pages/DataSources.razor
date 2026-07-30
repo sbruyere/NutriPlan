@@ -1,0 +1,104 @@
+@page "/donnees"
+
+<PageTitle>NutriPlan — Sources des données</PageTitle>
+
+<div class="space-y-4">
+
+    <!-- En-tête plaque charbon, langage VOLT -->
+    <div class="bg-carbon rounded-xl p-5 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
+        <p class="text-[10px] font-extrabold uppercase tracking-[.14em] text-volt flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 bg-volt inline-block"></span> Transparence
+        </p>
+        <h1 class="font-display text-2xl font-extrabold text-snow mt-1.5">Sources des données</h1>
+        <p class="text-[13px] text-gray-400 mt-2 leading-relaxed">
+            D'où viennent les chiffres affichés dans votre carnet — et ce qu'ils veulent dire.
+        </p>
+    </div>
+
+    <!-- Référentiel nutritionnel -->
+    <section class="bg-white rounded-xl p-5 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
+        <h2 class="font-display text-[15px] font-extrabold text-carbon flex items-center gap-2">
+            <Icon Name="utensils" Class="w-4 h-4 text-primary-600" /> Composition nutritionnelle des aliments
+        </h2>
+        <p class="text-[13px] text-gray-600 mt-2 leading-relaxed">
+            Les valeurs nutritionnelles (calories, protéines, glucides, sucres, lipides, acides gras saturés,
+            fibres, sel) proviennent de la <strong>table Ciqual 2025</strong> de
+            l'<a href="https://ciqual.anses.fr" target="_blank" rel="noopener" class="underline decoration-primary-300 underline-offset-2 hover:text-primary-700">ANSES</a>
+            (Agence nationale de sécurité sanitaire de l'alimentation), la référence française de la composition
+            des aliments : <strong>3 484 aliments génériques</strong> analysés ou compilés par l'agence.
+        </p>
+        <p class="text-[13px] text-gray-600 mt-2 leading-relaxed">
+            Ces données sont publiées sous
+            <a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence/" target="_blank" rel="noopener" class="underline decoration-primary-300 underline-offset-2 hover:text-primary-700">Licence Ouverte Etalab 2.0</a>
+            et importées dans NutriPlan (version du 03/11/2025). Les poids typiques par unité
+            (une tranche, une poignée, un verre…) sont des ordres de grandeur ajoutés par NutriPlan
+            pour faciliter la saisie.
+        </p>
+        <div class="mt-3 rounded-lg bg-[#f7f9fb] border border-[#e2e8ee] px-3.5 py-2.5">
+            <p class="text-[12px] text-gray-500 leading-relaxed">
+                <strong class="text-gray-700">Un aliment manque ?</strong> La couverture Ciqual n'est pas exhaustive
+                (certains aliments comme le riz noir n'y figurent pas encore). Vous pouvez toujours saisir un aliment
+                librement — il sera enregistré sans estimation calorique automatique. L'intégration de référentiels
+                complémentaires est à l'étude.
+            </p>
+        </div>
+    </section>
+
+    <!-- Estimations et calculs -->
+    <section class="bg-white rounded-xl p-5 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
+        <h2 class="font-display text-[15px] font-extrabold text-carbon flex items-center gap-2">
+            <Icon Name="bar-chart" Class="w-4 h-4 text-primary-600" /> Estimations et calculs
+        </h2>
+        <ul class="text-[13px] text-gray-600 mt-2 leading-relaxed space-y-2">
+            <li>
+                <strong>Calories des repas</strong> : estimées à partir des quantités saisies et des valeurs
+                Ciqual pour 100 g, avec conversion des unités usuelles (cuillères, verres, pièces…).
+            </li>
+            <li>
+                <strong>Métabolisme de base</strong> : formule de <em>Mifflin-St Jeor</em>, à partir du profil
+                renseigné (sexe, taille, poids, année de naissance).
+            </li>
+            <li>
+                <strong>Besoins journaliers</strong> : métabolisme de base multiplié par le niveau
+                d'activité déclaré (facteur 1,2 à 1,9).
+            </li>
+        </ul>
+        <p class="text-[12px] text-gray-400 mt-3 leading-relaxed">
+            Ces chiffres sont des <strong>estimations indicatives</strong> destinées au suivi et au dialogue
+            avec votre nutritionniste — pas un dispositif médical ni une prescription.
+        </p>
+    </section>
+
+    <!-- Activités sportives -->
+    <section class="bg-white rounded-xl p-5 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
+        <h2 class="font-display text-[15px] font-extrabold text-carbon flex items-center gap-2">
+            <Icon Name="activity" Class="w-4 h-4 text-primary-600" /> Activités sportives
+        </h2>
+        <p class="text-[13px] text-gray-600 mt-2 leading-relaxed">
+            Si vous connectez votre compte <a href="https://www.strava.com" target="_blank" rel="noopener" class="underline decoration-primary-300 underline-offset-2 hover:text-primary-700">Strava</a>,
+            vos activités (titre, sport, durée, distance, dénivelé, calories, photo de couverture) sont importées
+            via l'API officielle Strava, avec votre autorisation explicite et uniquement en lecture.
+            Vous pouvez déconnecter Strava ou supprimer les activités importées à tout moment depuis votre profil.
+            Les activités saisies à la main ne dépendent d'aucun service externe.
+        </p>
+    </section>
+
+    <!-- Vos données -->
+    <section class="bg-white rounded-xl p-5 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
+        <h2 class="font-display text-[15px] font-extrabold text-carbon flex items-center gap-2">
+            <Icon Name="lock" Class="w-4 h-4 text-primary-600" /> Vos données personnelles
+        </h2>
+        <p class="text-[13px] text-gray-600 mt-2 leading-relaxed">
+            Le contenu de votre carnet (repas, photos, ressentis, profil) est stocké sur le serveur NutriPlan
+            et sauvegardé quotidiennement. Il n'est ni partagé ni vendu à des tiers : seules les personnes
+            disposant du code d'accès du carnet — vous et, le cas échéant, votre nutritionniste — peuvent le consulter.
+            Les photos sont redimensionnées côté serveur ; les originaux ne sont pas conservés.
+        </p>
+    </section>
+
+    <p class="text-center">
+        <a href="/" class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-500 hover:text-carbon transition-colors">
+            <Icon Name="arrow-left" Class="w-3.5 h-3.5" /> Retour à l'accueil
+        </a>
+    </p>
+</div>
