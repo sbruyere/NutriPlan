@@ -563,21 +563,34 @@ else
                             var prevRow = ri > 0 ? friseRows[ri - 1] : null;
                             var nextRow = ri < friseRows.Count ? friseRows[ri] : null;
                             var bTime = CalcInsertTime(prevRow, nextRow);
-                            <!-- ╌ Zone d'insertion pleine largeur (survol pointeur fin, toujours visible au tactile,
-                                 accepte aussi le dépôt d'une activité glissée) ╌ -->
-                            <div class="group/insert flex gap-2 items-center h-5 cursor-default relative z-10 print:hidden"
+                            <!-- ╌ Couture d'insertion : au repos un pointillé pâle + losange creux sur le rail
+                                 (le vocabulaire de la timeline : losange vide = un événement peut naître ici).
+                                 Au survol — ou après un premier appui au tactile — la couture s'ouvre en bande
+                                 hachurée « Activité sportive », même langage que les jalons fantômes de repas.
+                                 Sert aussi de cible de dépôt pour le drag d'une activité. ╌ -->
+                            <div class="group/insert relative h-7 z-10 print:hidden"
+                                 @onclick="() => armedInsert = insertIdx"
                                  @ondragover:preventDefault="true"
                                  @ondragover="() => OnInsertDragOver(insertIdx)"
                                  @ondragleave="() => OnInsertDragLeave(insertIdx)"
                                  @ondrop="async () => await HandleActivityDropAt(bTime, insertIdx)">
-                                <div class="flex-1 flex items-center opacity-0 group-hover/insert:opacity-100 pointer-coarse:opacity-100 transition-opacity duration-150 pointer-events-none @(actDropTarget == insertIdx ? "!opacity-100" : "")">
-                                    <div class="flex-1 h-px @(actDropTarget == insertIdx ? "bg-volt" : "bg-[#cbd3da]")"></div>
-                                    <button @onclick="async () => await InsertActivity(bTime)"
-                                            class="pointer-events-auto mx-2 text-[9px] font-extrabold uppercase tracking-[.1em] px-2.5 py-1 rounded-[5px] transition-colors whitespace-nowrap @(actDropTarget == insertIdx ? "bg-volt text-carbon" : "bg-carbon text-volt hover:bg-carbon-2")">
-                                        @(actDropTarget == insertIdx ? "Déposer ici" : "+ Activité sportive")
-                                    </button>
-                                    <div class="flex-1 h-px @(actDropTarget == insertIdx ? "bg-volt" : "bg-[#cbd3da]")"></div>
-                                </div>
+                                @{ bool insertActive = armedInsert == insertIdx || actDropTarget == insertIdx; }
+                                <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-[#d3dae0] transition-opacity duration-150 pointer-fine:group-hover/insert:opacity-0 @(insertActive ? "opacity-0" : "")" aria-hidden="true"></div>
+                                <span class="absolute -left-[13px] top-1/2 -mt-1 w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] border-[1.5px] transition-colors duration-150 pointer-fine:group-hover/insert:bg-volt pointer-fine:group-hover/insert:border-volt @(insertActive ? "bg-volt border-volt" : "bg-canvas border-[#aeb8c0]")" aria-hidden="true"></span>
+                                <button type="button"
+                                        @onclick="async () => await InsertActivity(bTime)"
+                                        @onclick:stopPropagation="true"
+                                        class="absolute inset-x-0 inset-y-0.5 flex items-center gap-2 px-3 rounded-[7px] text-left cursor-pointer
+                                               bg-[repeating-linear-gradient(135deg,#dde3e9_0_7px,#e4e9ee_7px_14px)]
+                                               opacity-0 pointer-events-none transition-opacity duration-150
+                                               pointer-fine:group-hover/insert:opacity-100 pointer-fine:group-hover/insert:pointer-events-auto
+                                               focus-visible:opacity-100 focus-visible:pointer-events-auto
+                                               @(insertActive ? "!opacity-100 !pointer-events-auto" : "")">
+                                    <span class="flex-1 min-w-0 truncate font-display text-[11.5px] font-extrabold text-[#69737d]">Activité sportive</span>
+                                    <span class="bg-volt text-carbon rounded-[5px] px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.1em] shadow-[0_2px_0_rgba(14,17,20,.18)] flex-shrink-0 select-none">
+                                        @(actDropTarget == insertIdx ? "Déposer ici" : "+ Ajouter")
+                                    </span>
+                                </button>
                             </div>
 
                             @if (ri < friseRows.Count)
@@ -968,6 +981,7 @@ else
     // ── Drag & drop ──────────────────────────────────────────────────────────
     DayEvent? draggedEvent;
     int? actDropTarget;   // index de la zone d'insertion survolée pendant le drag d'une activité
+    int? armedInsert;     // couture « ouverte » par un premier appui (tactile : appui 1 = révéler, appui 2 = créer)
     int? mealDropTarget;  // slot cible pour un jalon repas
 
     void StartDrag(DayEvent evt) { draggedEvent = evt; actDropTarget = null; mealDropTarget = null; }
@@ -1084,6 +1098,7 @@ else
     async Task LoadDay()
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
+        armedInsert = null;
         // Balayage : un jalon créé puis laissé vierge (éditeur refermé, onglet fermé,
         // déconnexion) est supprimé et redevient fantôme — sauf celui en cours d'édition.
         var untouched = (currentLog?.Events ?? []).Where(e => e.Id != editingEventId && IsUntouchedSlotEvent(e)).Select(e => e.Id).ToList();
