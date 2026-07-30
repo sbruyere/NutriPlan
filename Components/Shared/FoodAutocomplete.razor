@@ -76,6 +76,27 @@
     static string? CatalogHint(CatalogFood c) =>
         c.KcalPer100g is double k ? $"{k:0} kcal/100 g" : null;
 
+    // ── Tri par « pureté » : l'aliment brut avant la préparation qui le contient ──
+    // « Riz blanc, cuit » doit précéder « Salade de riz au thon…, préemballée ».
+    // Marqueurs de transformation/composition repérés dans le nom plié (sans accents).
+    static readonly string[] ComposedMarkers =
+    [
+        "preemball", "appertis", "surgel", "cuisin", "du commerce", "rayon frais",
+        "fait maison", "plat ", "salade de", "sauce", "farci", "pane", "nappe",
+        "fourre", "aromatis", "enrichi", "assaisonn", "melange", "dessert",
+        "biscuit", "snack", "barre ", "confiture", "compote", "infantile",
+    ];
+
+    static int PurityScore(CatalogFood c)
+    {
+        var f = c.SearchName;
+        int score = 0;
+        foreach (var m in ComposedMarkers) if (f.Contains(m)) score += 4;
+        score += f.Count(ch => ch == ',');   // chaque qualificatif éloigne de l'aliment brut
+        score += f.Length / 24;              // les intitulés interminables en dernier
+        return score;
+    }
+
     void Refilter()
     {
         var q = Fold(Value ?? "").Trim();
@@ -99,12 +120,15 @@
             if (items.Count >= MaxHistory) break;
         }
 
-        // 2. Référentiel Ciqual (à partir de 2 caractères)
+        // 2. Référentiel (à partir de 2 caractères) — préfixe d'abord, puis les
+        //    aliments les plus « purs » avant les préparations composées.
         if (q.Length >= 2)
         {
-            var starts = Catalog.Where(c => c.SearchName.StartsWith(tokens[0]) && Matches(c.SearchName));
-            var contains = Catalog.Where(c => !c.SearchName.StartsWith(tokens[0]) && Matches(c.SearchName));
-            foreach (var c in starts.Concat(contains))
+            var ordered = Catalog.Where(c => Matches(c.SearchName))
+                .OrderBy(c => c.SearchName.StartsWith(tokens[0]) ? 0 : 1)
+                .ThenBy(PurityScore)
+                .ThenBy(c => c.Name.Length);
+            foreach (var c in ordered)
             {
                 if (items.Count >= MaxTotal) break;
                 if (!taken.Add(c.SearchName)) continue;
