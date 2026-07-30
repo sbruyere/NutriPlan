@@ -5,8 +5,3 @@ window.nutriplan = {
     print: () => window.print(),
     copyText: (text) => navigator.clipboard.writeText(text),
 };
-
-// PWA : service worker minimal (installabilité Android/Chrome — aucun cache).
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => { /* non bloquant */ });
-}
