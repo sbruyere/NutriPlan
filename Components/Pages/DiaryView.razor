@@ -606,7 +606,8 @@ else
                                     var slotInfo = slotIdx.HasValue ? DiaryService.MealSlots[slotIdx.Value] : DiaryService.MealSlots[0];
                                     @* Pas de z-index ici : un contexte d'empilement piégerait les popovers
                                        (z-30) de l'EventCard sous les lignes suivantes de la frise. *@
-                                    <div @key="@($"slot-{slotIdx}")" class="relative mb-5"
+                                    @* mb-1 seulement : la couture d'insertion (h-7) fournit déjà l'espacement vertical *@
+                                    <div @key="@($"slot-{slotIdx}")" class="relative mb-1"
                                          @ondragover:preventDefault="true"
                                          @ondragover="() => OnMealSlotDragOver(slotIdx ?? -1)"
                                          @ondragleave="() => OnMealSlotDragLeave(slotIdx ?? -1)"
@@ -655,7 +656,7 @@ else
                                 }
                                 else
                                 {
-                                    <div @key="@($"evt-{rowEvent!.Id}")" class="relative mb-5"
+                                    <div @key="@($"evt-{rowEvent!.Id}")" class="relative mb-1"
                                          style="@DragStyle(rowEvent!.Id)">
                                         <input type="time"
                                                value="@(rowEvent!.Time?.ToString(@"HH\:mm") ?? "")"
