@@ -586,9 +586,9 @@ else
                                                pointer-fine:group-hover/insert:opacity-100 pointer-fine:group-hover/insert:pointer-events-auto
                                                focus-visible:opacity-100 focus-visible:pointer-events-auto
                                                @(insertActive ? "!opacity-100 !pointer-events-auto" : "")">
-                                    <span class="flex-1 min-w-0 truncate font-display text-[11.5px] font-extrabold text-[#69737d]">Activité sportive</span>
-                                    <span class="bg-volt text-carbon rounded-[5px] px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.1em] shadow-[0_2px_0_rgba(14,17,20,.18)] flex-shrink-0 select-none">
-                                        @(actDropTarget == insertIdx ? "Déposer ici" : "+ Ajouter")
+                                    @* Toute la bande est le bouton : pas de chip interne, juste le libellé *@
+                                    <span class="flex-1 min-w-0 truncate font-display text-[11.5px] font-extrabold text-[#69737d]">
+                                        @(actDropTarget == insertIdx ? "Déposer ici" : "+ Activité sportive")
                                     </span>
                                 </button>
                             </div>
