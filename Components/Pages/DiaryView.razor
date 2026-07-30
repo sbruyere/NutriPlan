@@ -565,19 +565,24 @@ else
                             var bTime = CalcInsertTime(prevRow, nextRow);
                             <!-- ╌ Zone d'insertion pleine largeur (survol pointeur fin, toujours visible au tactile,
                                  accepte aussi le dépôt d'une activité glissée) ╌ -->
-                            <div class="group/insert flex gap-2 items-center h-5 cursor-default relative z-10 print:hidden"
+                            @* Zone d'insertion d'activité : un simple (+) discret et grisé,
+                               qui s'affirme au survol — cible de dépôt pour le drag & drop. *@
+                            <div class="flex items-center justify-center h-6 cursor-default relative z-10 print:hidden"
                                  @ondragover:preventDefault="true"
                                  @ondragover="() => OnInsertDragOver(insertIdx)"
                                  @ondragleave="() => OnInsertDragLeave(insertIdx)"
                                  @ondrop="async () => await HandleActivityDropAt(bTime, insertIdx)">
-                                <div class="flex-1 flex items-center opacity-0 group-hover/insert:opacity-100 pointer-coarse:opacity-100 transition-opacity duration-150 pointer-events-none @(actDropTarget == insertIdx ? "!opacity-100" : "")">
-                                    <div class="flex-1 h-px @(actDropTarget == insertIdx ? "bg-volt" : "bg-[#cbd3da]")"></div>
+                                @if (actDropTarget == insertIdx)
+                                {
+                                    <span class="bg-volt text-carbon text-[9px] font-extrabold uppercase tracking-[.1em] px-2.5 py-1 rounded-[5px] pointer-events-none">Déposer ici</span>
+                                }
+                                else
+                                {
                                     <button @onclick="async () => await InsertActivity(bTime)"
-                                            class="pointer-events-auto mx-2 text-[9px] font-extrabold uppercase tracking-[.1em] px-2.5 py-1 rounded-[5px] transition-colors whitespace-nowrap @(actDropTarget == insertIdx ? "bg-volt text-carbon" : "bg-carbon text-volt hover:bg-carbon-2")">
-                                        @(actDropTarget == insertIdx ? "Déposer ici" : "+ Activité sportive")
-                                    </button>
-                                    <div class="flex-1 h-px @(actDropTarget == insertIdx ? "bg-volt" : "bg-[#cbd3da]")"></div>
-                                </div>
+                                            title="Ajouter une activité sportive" aria-label="Ajouter une activité sportive"
+                                            class="w-5 h-5 rounded-full flex items-center justify-center text-[13px] leading-none font-bold
+                                                   text-[#b9c1c9] transition-all duration-150 hover:bg-volt hover:text-carbon">+</button>
+                                }
                             </div>
 
                             @if (ri < friseRows.Count)
