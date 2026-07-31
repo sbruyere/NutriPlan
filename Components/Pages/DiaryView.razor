@@ -7,6 +7,7 @@
 @inject StravaService Strava
 @inject BrowserTimeService Time
 @inject ToastService Toast
+@implements IDisposable
 
 <PageTitle>Mon carnet — NutriPlan</PageTitle>
 
@@ -422,6 +423,11 @@ else
         }
         else
         {
+            @* Conteneur stable pour les écouteurs tactiles (swipe gauche/droite = jour
+               suivant/précédent) ; le div interne, re-créé à chaque changement de date
+               (@key), rejoue l'animation de « page » qui glisse depuis le bon côté. *@
+            <div id="journal-swipe">
+            <div @key="selectedDate" class="@swipeAnim">
             <!-- Navigation date -->
             <div class="flex items-end justify-between gap-2 pt-1">
                 <div class="min-w-0">
@@ -696,6 +702,8 @@ else
                                   class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-400"></textarea>
                     </div>
                 </div>
+            </div>
+            </div>
             </div>
         }
     </div>
@@ -1116,11 +1124,37 @@ else
         if (catalog.Count == 0) catalog = await DiaryService.GetCatalogAsync();
     }
 
-    async Task PreviousDay() { editingEventId = null; selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
+    // ── Changement de jour : chevrons et swipe tactile, avec animation de « page » ──
+
+    string swipeAnim = "";                              // classe d'animation du conteneur @key
+    DotNetObjectReference<DiaryView>? swipeRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Idempotent (garde côté JS) : l'élément n'existe qu'une fois le carnet
+        // déverrouillé, on retente donc à chaque rendu.
+        swipeRef ??= DotNetObjectReference.Create(this);
+        try { await JS.InvokeVoidAsync("nutriplan.attachDaySwipe", "journal-swipe", swipeRef); }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public async Task OnDaySwipe(string direction)
+    {
+        // Pas de changement de jour en pleine édition ni hors de la frise.
+        if (editingEventId != null || showHistory || showMoveDay || tableView) return;
+        if (direction == "next") await NextDay();
+        else await PreviousDay();
+        StateHasChanged();
+    }
+
+    public void Dispose() => swipeRef?.Dispose();
+
+    async Task PreviousDay() { swipeAnim = "day-slide-in-left"; editingEventId = null; selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
 
     async Task NextDay()
     {
-        if (selectedDate < Time.Today) { editingEventId = null; selectedDate = selectedDate.AddDays(1); await LoadDay(); }
+        if (selectedDate < Time.Today) { swipeAnim = "day-slide-in-right"; editingEventId = null; selectedDate = selectedDate.AddDays(1); await LoadDay(); }
     }
 
     async Task SelectDate(DateOnly date)
