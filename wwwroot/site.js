@@ -15,12 +15,13 @@ window.nutriplan = {
         if (!wrap || wrap.dataset.pagerAttached) return;
         wrap.dataset.pagerAttached = '1';
         const track = () => wrap.querySelector('[data-pager-track]');
+        const GAP = 24; // gouttière gap-6 entre les pages — incluse dans la base et la course
         let x0 = 0, y0 = 0, dx = 0, width = 1, active = false, horizontal = null, settling = false;
         const setX = (px, animate) => {
             const t = track();
             if (!t) return;
             t.style.transition = animate ? 'transform .26s cubic-bezier(.2,.7,.3,1)' : 'none';
-            t.style.transform = `translateX(calc(-100% + ${px}px))`;
+            t.style.transform = `translateX(calc(-100% - ${GAP}px + ${px}px))`;
         };
         wrap.addEventListener('touchstart', e => {
             if (settling || e.touches.length !== 1 || wrap.dataset.pagerEnabled !== '1') { active = false; return; }
@@ -50,7 +51,7 @@ window.nutriplan = {
             const commit = Math.abs(dx) > width * 0.22 && (!goNext || wrap.dataset.canNext === '1');
             if (!commit) { setX(0, true); return; }
             settling = true;
-            setX(goNext ? -width : width, true);
+            setX(goNext ? -(width + GAP) : width + GAP, true);
             setTimeout(() => {
                 dotnetRef.invokeMethodAsync('OnPagerSettled', goNext ? 'next' : 'prev')
                     .finally(() => { settling = false; });
@@ -62,6 +63,6 @@ window.nutriplan = {
     // Recale la piste au centre sans animation, après le rechargement du contenu.
     resetPager: (id) => {
         const t = document.getElementById(id)?.querySelector('[data-pager-track]');
-        if (t) { t.style.transition = 'none'; t.style.transform = 'translateX(-100%)'; }
+        if (t) { t.style.transition = 'none'; t.style.transform = 'translateX(calc(-100% - 24px))'; }
     },
 };

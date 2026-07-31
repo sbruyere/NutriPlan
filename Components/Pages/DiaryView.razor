@@ -431,9 +431,11 @@ else
             <div id="journal-swipe" class="overflow-hidden" style="touch-action: pan-y;"
                  data-pager-enabled="@(editingEventId == null && !showMoveDay && !tableView ? "1" : "0")"
                  data-can-next="@(selectedDate < Time.Today ? "1" : "0")">
-            <div data-pager-track class="flex items-start" style="transform:translateX(-100%);">
+            @* gap-6 = gouttière visible entre les pages pendant le glissement ;
+               la base de translation (-100% - 1.5rem) compense cet interstice. *@
+            <div data-pager-track class="flex items-start gap-6" style="transform:translateX(calc(-100% - 1.5rem));">
             <div class="w-full flex-shrink-0 print:hidden" aria-hidden="true">
-                <DayGlance Date="@selectedDate.AddDays(-1)" Log="@CachedLog(selectedDate.AddDays(-1))" />
+                <DayGlance Date="@selectedDate.AddDays(-1)" Log="@CachedLog(selectedDate.AddDays(-1))" Diary="@diary" />
             </div>
             <div class="w-full flex-shrink-0">
             <div @key="selectedDate" class="@swipeAnim">
@@ -760,7 +762,7 @@ else
             <div class="w-full flex-shrink-0 print:hidden" aria-hidden="true">
                 @if (selectedDate < Time.Today)
                 {
-                    <DayGlance Date="@selectedDate.AddDays(1)" Log="@CachedLog(selectedDate.AddDays(1))" />
+                    <DayGlance Date="@selectedDate.AddDays(1)" Log="@CachedLog(selectedDate.AddDays(1))" Diary="@diary" />
                 }
             </div>
             </div>
@@ -1199,7 +1201,12 @@ else
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
         dayCache[selectedDate] = currentLog;
-        _ = PreloadNeighborsAsync();   // aperçus voisins du pager, en tâche de fond
+        // Les voisins immédiats sont chargés AVANT le rendu (les aperçus du pager
+        // ne doivent jamais apparaître vides) ; ±2/3 suivent en tâche de fond.
+        foreach (var d in new[] { selectedDate.AddDays(-1), selectedDate.AddDays(1) })
+            if (d <= Time.Today && !dayCache.ContainsKey(d))
+                dayCache[d] = await DiaryService.GetDailyLogFullAsync(diary!.Id, d);
+        _ = PreloadNeighborsAsync();
         armedInsert = null;
         editingWeight = false;
         // Commentaires du nutritionniste : mémorise les non-lus (badge « Nouveau »
@@ -1287,12 +1294,12 @@ else
 
     DailyLog? CachedLog(DateOnly date) => dayCache.TryGetValue(date, out var log) ? log : null;
 
-    // Précharge ±3 jours en tâche de fond ; les mutations du cache repassent par
-    // le dispatcher du circuit (pas de dictionnaire partagé entre threads).
+    // Précharge ±2/3 jours en tâche de fond (±1 est chargé en avance par LoadDay) ;
+    // les mutations du cache repassent par le dispatcher du circuit.
     async Task PreloadNeighborsAsync()
     {
         var center = selectedDate;
-        var wanted = Enumerable.Range(1, 3)
+        var wanted = Enumerable.Range(2, 2)
             .SelectMany(i => new[] { center.AddDays(-i), center.AddDays(i) })
             .Where(d => d <= Time.Today && !dayCache.ContainsKey(d))
             .ToList();
@@ -1305,7 +1312,6 @@ else
             foreach (var (d, log) in fetched) dayCache[d] = log;
             foreach (var stale in dayCache.Keys.Where(k => Math.Abs(k.DayNumber - selectedDate.DayNumber) > 4).ToList())
                 dayCache.Remove(stale);
-            StateHasChanged();
         });
     }
 

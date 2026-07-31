@@ -16,19 +16,37 @@
             <span class="w-1.5 h-1.5 bg-volt inline-block"></span>
             <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">Bilan du jour</span>
         </div>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-3 gap-x-2 gap-y-4">
             <div>
                 <p class="font-display text-xl font-extrabold text-volt leading-none">@FilledMeals<span class="text-[11px] text-snow">/@DiaryService.MealSlots.Length</span></p>
-                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Repas</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Repas</p>
             </div>
             <div>
-                <p class="font-display text-xl font-extrabold text-volt leading-none">@(KcalIn > 0 ? $"≈ {KcalIn}" : "—")</p>
-                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Kcal ingérées</p>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@(HydrationMl > 0 ? FormatHydration(HydrationMl) : "—")</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Hydratation</p>
             </div>
             <div>
                 <p class="font-display text-xl font-extrabold text-volt leading-none">@(ActivityMin > 0 ? FormatMin(ActivityMin) : "—")</p>
-                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Activité</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Activité</p>
             </div>
+            <div>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@(KcalIn > 0 ? $"≈ {KcalIn}" : "—")</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Kcal ingérées</p>
+            </div>
+            <div>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@(KcalBurned > 0 ? $"≈ {KcalBurned}" : "—")</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Kcal dépensées</p>
+            </div>
+            <div>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@(Balance is int b ? $"{(b >= 0 ? "+" : "")}{b}" : "—")</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Bilan</p>
+            </div>
+        </div>
+        <div class="flex gap-1 mt-3">
+            @for (var seg = 0; seg < DiaryService.MealSlots.Length; seg++)
+            {
+                <span class="flex-1 h-1 rounded-sm @(seg < FilledMeals ? "bg-volt" : "bg-carbon-2")"></span>
+            }
         </div>
     </div>
 
@@ -81,6 +99,7 @@
 @code {
     [Parameter, EditorRequired] public DateOnly Date { get; set; }
     [Parameter] public DailyLog? Log { get; set; }
+    [Parameter] public FoodDiary? Diary { get; set; }
 
     static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
 
@@ -92,9 +111,29 @@
     int KcalIn => (int)Math.Round(Log?.Events.Where(e => e.EventType == DayEventType.Meal)
         .SelectMany(e => e.FoodEntries).Sum(f => DiaryService.EstimateKcal(f) ?? 0) ?? 0);
 
+    int KcalBurned => Log?.Events.Where(e => e.EventType == DayEventType.Activity).Sum(e => e.CaloriesBurned ?? 0) ?? 0;
+
+    int HydrationMl => Log == null ? 0
+        : DiaryService.EstimateHydrationMl(Log.Events.SelectMany(e => e.DrinkEntries));
+
+    // Même règle que la vue réelle : ingérées − sport − métabolisme de base.
+    int? Balance
+    {
+        get
+        {
+            if (KcalIn == 0 && KcalBurned == 0) return null;
+            var bmr = Diary == null ? null : DiaryService.BasalMetabolicRate(Diary, Date.Year);
+            return (int)Math.Round(KcalIn - KcalBurned - (bmr ?? 0));
+        }
+    }
+
     int ActivityMin => Log?.Events.Where(e => e.EventType == DayEventType.Activity).Sum(e => e.DurationMinutes ?? 0) ?? 0;
 
     static string FormatMin(int m) => m >= 60 ? $"{m / 60}h{m % 60:00}" : $"{m} min";
+
+    static string FormatHydration(int ml) => ml >= 1000
+        ? string.Format(Fr, "≈ {0:0.#} L", ml / 1000.0)
+        : $"≈ {ml} ml";
 
     IEnumerable<GlanceRow> Rows()
     {
