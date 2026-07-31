@@ -7,15 +7,18 @@
 
 <div class="max-w-md mx-auto py-8">
     <div class="mb-6">
-        <a href="/" class="text-primary-600 hover:underline text-sm flex items-center gap-1">
-            ← Retour à l'accueil
+        <a href="/" class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-500 hover:text-carbon transition-colors">
+            <Icon Name="arrow-left" Class="w-3.5 h-3.5" /> Retour à l'accueil
         </a>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm p-6">
+    <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-6">
         <div class="text-center mb-6">
-            <div class="text-4xl mb-2">👨‍⚕️</div>
-            <h1 class="font-display text-2xl font-semibold text-gray-800">Espace nutritionniste</h1>
+            <div class="w-12 h-12 rounded-xl bg-carbon flex items-center justify-center mx-auto mb-3 shadow-[0_12px_20px_-12px_rgba(8,12,16,.6)]">
+                <Icon Name="user-check" Class="w-6 h-6 text-volt" />
+            </div>
+            <p class="text-[10px] font-extrabold uppercase tracking-[.14em] text-gray-400">Espace pro</p>
+            <h1 class="font-display text-2xl font-extrabold text-carbon mt-1">Espace nutritionniste</h1>
         </div>
 
         @if (!showRegister)
@@ -23,33 +26,33 @@
             <!-- Formulaire connexion -->
             <div class="space-y-4">
                 <div>
-                    <label for="login-email" class="block text-sm font-medium text-gray-600 mb-1.5">Email</label>
+                    <label for="login-email" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Email</label>
                     <input id="login-email" @bind="email" type="email" placeholder="votre@email.com"
-                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                 </div>
                 <div>
-                    <label for="login-password" class="block text-sm font-medium text-gray-600 mb-1.5">Mot de passe</label>
+                    <label for="login-password" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Mot de passe</label>
                     <input id="login-password" @bind="password" @onkeyup="OnLoginKeyUp" type="password" placeholder="••••••••"
-                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                 </div>
 
                 @if (!string.IsNullOrEmpty(regSuccess))
                 {
-                    <div role="status" class="bg-green-50 text-green-700 text-sm rounded-xl px-4 py-3">@regSuccess</div>
+                    <div role="status" class="bg-green-50 text-green-700 text-sm rounded-lg px-4 py-3">@regSuccess</div>
                 }
                 @if (!string.IsNullOrEmpty(loginError))
                 {
-                    <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@loginError</div>
+                    <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-lg px-4 py-3">@loginError</div>
                 }
 
                 <button @onclick="DoLogin" disabled="@isLoading"
-                        class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-xl font-medium transition-colors">
+                        class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-lg font-display font-extrabold text-sm shadow-[0_2px_0_rgba(14,17,20,.18)] transition-colors">
                     @(isLoading ? "Connexion…" : "Se connecter")
                 </button>
 
                 <p class="text-center text-sm text-gray-400">
                     Pas encore de compte ?
-                    <button @onclick="() => showRegister = true" class="text-primary-600 hover:underline font-medium">
+                    <button @onclick="() => showRegister = true" class="text-primary-600 hover:text-primary-700 hover:underline font-semibold">
                         S'inscrire
                     </button>
                 </p>
@@ -60,43 +63,43 @@
             <!-- Formulaire inscription -->
             <div class="space-y-4">
                 <div>
-                    <label for="reg-name" class="block text-sm font-medium text-gray-600 mb-1.5">Nom complet</label>
+                    <label for="reg-name" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Nom complet</label>
                     <input id="reg-name" @bind="regName" type="text" placeholder="Dr. Marie Dupont"
-                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                 </div>
                 <div>
-                    <label for="reg-email" class="block text-sm font-medium text-gray-600 mb-1.5">Email professionnel</label>
+                    <label for="reg-email" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Email professionnel</label>
                     <input id="reg-email" @bind="regEmail" type="email" placeholder="votre@email.com"
-                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                 </div>
                 <div>
-                    <label for="reg-password" class="block text-sm font-medium text-gray-600 mb-1.5">Mot de passe</label>
+                    <label for="reg-password" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Mot de passe</label>
                     <input id="reg-password" @bind="regPassword" type="password" placeholder="Minimum 8 caractères"
-                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                 </div>
                 <div>
-                    <label for="reg-password-confirm" class="block text-sm font-medium text-gray-600 mb-1.5">Confirmer le mot de passe</label>
+                    <label for="reg-password-confirm" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Confirmer le mot de passe</label>
                     <input id="reg-password-confirm" @bind="regPasswordConfirm" type="password" placeholder="••••••••"
-                           class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                 </div>
 
                 @if (!string.IsNullOrEmpty(regError))
                 {
-                    <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">@regError</div>
+                    <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-lg px-4 py-3">@regError</div>
                 }
                 @if (!string.IsNullOrEmpty(regSuccess))
                 {
-                    <div role="status" class="bg-green-50 text-green-700 text-sm rounded-xl px-4 py-3">@regSuccess</div>
+                    <div role="status" class="bg-green-50 text-green-700 text-sm rounded-lg px-4 py-3">@regSuccess</div>
                 }
 
                 <button @onclick="Register" disabled="@isLoading"
-                        class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-xl font-medium transition-colors">
+                        class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-lg font-display font-extrabold text-sm shadow-[0_2px_0_rgba(14,17,20,.18)] transition-colors">
                     @(isLoading ? "Inscription…" : "Créer mon compte")
                 </button>
 
                 <p class="text-center text-sm text-gray-400">
                     Déjà un compte ?
-                    <button @onclick="() => showRegister = false" class="text-primary-600 hover:underline font-medium">
+                    <button @onclick="() => showRegister = false" class="text-primary-600 hover:text-primary-700 hover:underline font-semibold">
                         Se connecter
                     </button>
                 </p>
