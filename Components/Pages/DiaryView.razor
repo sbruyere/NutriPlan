@@ -536,6 +536,28 @@ else
                         }
                     </p>
                 }
+                @* Pesée rapide : le poids courant, éditable en place — enregistrée au jour affiché *@
+                <div class="flex items-center gap-2 mt-2.5 print:hidden">
+                    <span class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold">Poids</span>
+                    @if (editingWeight)
+                    {
+                        <input type="number" step="0.1" min="20" max="400" @bind="weightInput"
+                               aria-label="Poids en kilogrammes"
+                               class="w-20 bg-carbon-2 text-snow text-sm font-bold rounded-[5px] px-2 py-1 border-0 focus:outline-none focus:ring-1 focus:ring-volt [appearance:textfield]" />
+                        <button @onclick="SaveWeight"
+                                class="bg-volt hover:bg-volt-dark text-carbon text-[9px] font-extrabold uppercase tracking-[.1em] px-2.5 py-1 rounded-[5px]">Enregistrer</button>
+                        <button @onclick="() => editingWeight = false"
+                                class="text-[#79838c] hover:text-snow text-[9px] font-bold uppercase tracking-[.1em] px-1">Annuler</button>
+                    }
+                    else
+                    {
+                        <button @onclick="StartWeightEdit" title="Enregistrer une pesée pour le jour affiché"
+                                class="font-display text-sm font-extrabold text-snow hover:text-volt transition-colors leading-none">
+                            @(diary!.WeightKg is double pw ? $"{pw:0.#} kg" : "à renseigner")
+                            <span class="text-[10px] text-[#79838c] font-normal" aria-hidden="true">✎</span>
+                        </button>
+                    }
+                </div>
                 <div class="flex gap-1 mt-3" aria-hidden="true">
                     @for (var seg = 0; seg < DiaryService.MealSlots.Length; seg++)
                     {
@@ -543,6 +565,27 @@ else
                     }
                 </div>
             </div>
+
+            @* ── Messages du nutritionniste sur cette journée ─────────────────── *@
+            @if (currentLog?.Comments.Count > 0)
+            {
+                <div class="space-y-2 mt-4">
+                    @foreach (var dayComment in currentLog.Comments)
+                    {
+                        <div class="bg-white rounded-xl border-l-[3px] border-l-carbon shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] px-4 py-3">
+                            <p class="text-[9px] font-extrabold uppercase tracking-[.12em] text-gray-400 flex items-center gap-1.5">
+                                💬 Message de @(string.IsNullOrEmpty(dayComment.AuthorName) ? "votre nutritionniste" : dayComment.AuthorName)
+                                <span class="font-normal normal-case tracking-normal">· @dayComment.CreatedAt.ToLocalTime().ToString("d MMM HH:mm", new System.Globalization.CultureInfo("fr-FR"))</span>
+                                @if (newCommentIds.Contains(dayComment.Id))
+                                {
+                                    <span class="bg-volt text-carbon px-1.5 py-0.5 rounded-[4px] text-[8px] font-extrabold tracking-[.1em]">Nouveau</span>
+                                }
+                            </p>
+                            <p class="text-[13px] text-gray-700 leading-relaxed mt-1.5">@dayComment.Text</p>
+                        </div>
+                    }
+                </div>
+            }
 
             @if (tableView)
             {
@@ -1111,10 +1154,52 @@ else
 
     async Task OnPinKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await ValidatePin(); }
 
+    // ── Pesée rapide (bloc Bilan) ────────────────────────────────────────────
+    bool editingWeight;
+    double? weightInput;
+
+    void StartWeightEdit()
+    {
+        weightInput = diary?.WeightKg;
+        editingWeight = true;
+    }
+
+    async Task SaveWeight()
+    {
+        if (diary != null && weightInput is double kg and > 20 and < 400)
+        {
+            diary.WeightKg = await DiaryService.AddWeightAsync(diary.Id, selectedDate, kg);
+            Toast.ShowSuccess($"Pesée enregistrée : {kg:0.#} kg");
+        }
+        editingWeight = false;
+    }
+
+    // ── Commentaires du praticien : badge « Nouveau » + notification ─────────
+    HashSet<int> newCommentIds = [];
+    bool commentNoticeShown;
+
     async Task LoadDay()
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
         armedInsert = null;
+        editingWeight = false;
+        // Commentaires du nutritionniste : mémorise les non-lus (badge « Nouveau »
+        // du rendu en cours) puis les marque lus ; signale une seule fois les
+        // messages laissés sur d'autres journées.
+        newCommentIds = currentLog?.Comments.Where(c => !c.ReadByPatient).Select(c => c.Id).ToHashSet() ?? [];
+        if (newCommentIds.Count > 0)
+            await DiaryService.MarkDayCommentsReadAsync(currentLog!.Id);
+        if (!commentNoticeShown && diary != null)
+        {
+            commentNoticeShown = true;
+            var unreadDates = (await DiaryService.GetUnreadCommentDatesAsync(diary.Id)).Where(d => d != selectedDate).ToList();
+            if (unreadDates.Count > 0)
+            {
+                var fr = new System.Globalization.CultureInfo("fr-FR");
+                Toast.ShowSuccess($"💬 Message de votre nutritionniste sur le {unreadDates[0].ToString("d MMMM", fr)}" +
+                                  (unreadDates.Count > 1 ? $" (et {unreadDates.Count - 1} autre(s) jour(s))" : ""));
+            }
+        }
         // Balayage : un jalon créé puis laissé vierge (éditeur refermé, onglet fermé,
         // déconnexion) est supprimé et redevient fantôme — sauf celui en cours d'édition.
         var untouched = (currentLog?.Events ?? []).Where(e => e.Id != editingEventId && IsUntouchedSlotEvent(e)).Select(e => e.Id).ToList();

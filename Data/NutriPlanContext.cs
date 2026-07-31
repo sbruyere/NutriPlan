@@ -13,6 +13,8 @@ public class NutriPlanContext(DbContextOptions<NutriPlanContext> options) : DbCo
     public DbSet<DrinkEntry> DrinkEntries => Set<DrinkEntry>();
     public DbSet<MealPhoto> MealPhotos => Set<MealPhoto>();
     public DbSet<CatalogFood> CatalogFoods => Set<CatalogFood>();
+    public DbSet<WeightEntry> WeightEntries => Set<WeightEntry>();
+    public DbSet<DayComment> DayComments => Set<DayComment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,5 +46,18 @@ public class NutriPlanContext(DbContextOptions<NutriPlanContext> options) : DbCo
             .WithOne(e => e.DailyLog)
             .HasForeignKey(e => e.DailyLogId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<DailyLog>()
+            .HasMany(d => d.Comments)
+            .WithOne(c => c.DailyLog)
+            .HasForeignKey(c => c.DailyLogId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<FoodDiary>()
+            .HasMany(d => d.WeightEntries)
+            .WithOne(w => w.FoodDiary)
+            .HasForeignKey(w => w.FoodDiaryId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<WeightEntry>().HasIndex(w => new { w.FoodDiaryId, w.Date }).IsUnique();
     }
 }

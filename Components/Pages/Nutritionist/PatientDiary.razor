@@ -111,6 +111,44 @@ else
                         @((int)(r.FoodsLinkedShare * 100)) % des aliments reliés au référentiel Ciqual@(r.FoodsLinkedShare < 0.5 && r.MealCount > 0 ? " — moyennes énergétiques sous-estimées" : "")
                     </p>
 
+                    <!-- ── Évolution du poids sur la période ─────────────────── -->
+                    @if (weightHistory.Count > 0)
+                    {
+                        <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                            <div class="flex items-center justify-between flex-wrap gap-2">
+                                <h3 class="font-display text-[13px] font-extrabold text-carbon">Évolution du poids</h3>
+                                <p class="text-[11px] text-gray-500">
+                                    <span class="font-display font-extrabold text-carbon">@weightHistory[^1].WeightKg.ToString("0.#") kg</span>
+                                    <span class="text-gray-400"> le @weightHistory[^1].Date.ToString("d MMM", FrCulture)</span>
+                                    @if (weightHistory.Count >= 2)
+                                    {
+                                        var delta = weightHistory[^1].WeightKg - weightHistory[0].WeightKg;
+                                        <span class="font-bold ml-1 @(Math.Abs(delta) < 0.05 ? "text-gray-400" : "text-carbon")">
+                                            @(delta >= 0.05 ? "↗ +" : delta <= -0.05 ? "↘ " : "→ ")@delta.ToString("0.#") kg
+                                        </span>
+                                    }
+                                </p>
+                            </div>
+                            @if (weightHistory.Count >= 2)
+                            {
+                                var minW = weightHistory.Min(w => w.WeightKg);
+                                var maxW = weightHistory.Max(w => w.WeightKg);
+                                <svg viewBox="0 0 300 64" preserveAspectRatio="none" class="w-full h-16 mt-2" aria-label="Courbe de poids sur la période">
+                                    <polyline points="@WeightPoints()" fill="none" stroke="#101315" stroke-width="2"
+                                              stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+                                </svg>
+                                <div class="flex justify-between text-[9px] text-gray-400 font-bold tabular-nums">
+                                    <span>@weightHistory[0].Date.ToString("d MMM", FrCulture) · min @minW.ToString("0.#") kg</span>
+                                    <span>max @maxW.ToString("0.#") kg</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-[11px] text-gray-400 mt-1.5">Une seule pesée sur la période — la courbe apparaîtra dès la deuxième.</p>
+                            }
+                        </div>
+                    }
+
                     <!-- Moyennes énergie & macros — bloc charbon signature -->
                     <div class="bg-carbon rounded-xl p-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
                         <div class="flex items-center gap-1.5 mb-3">
@@ -268,6 +306,43 @@ else
                         <p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@WeekHungerSatiety</p>
                         <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Faim / Rassasié moy.</p>
                     </div>
+                </div>
+            </div>
+
+            @* ── Commentaires au patient sur cette journée ─────────────────── *@
+            <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4 print:hidden">
+                <h3 class="font-display text-[13px] font-extrabold text-carbon mb-2">💬 Commentaires au patient</h3>
+                @if (currentLog?.Comments.Count > 0)
+                {
+                    <div class="space-y-2 mb-3">
+                        @foreach (var dayComment in currentLog.Comments)
+                        {
+                            var c = dayComment;
+                            <div class="flex items-start gap-2 bg-[#f7f9fb] border border-[#e2e8ee] rounded-lg px-3 py-2">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-[10px] text-gray-400">
+                                        @c.CreatedAt.ToLocalTime().ToString("d MMM HH:mm", FrCulture)
+                                        <span class="@(c.ReadByPatient ? "text-primary-600" : "")"> · @(c.ReadByPatient ? "lu par le patient" : "non lu")</span>
+                                    </p>
+                                    <p class="text-[13px] text-gray-700 leading-relaxed">@c.Text</p>
+                                </div>
+                                <button @onclick="() => DeleteComment(c.Id)" title="Supprimer ce commentaire"
+                                        aria-label="Supprimer ce commentaire"
+                                        class="text-gray-400 hover:text-red-500 transition-colors p-1 flex-shrink-0">
+                                    <Icon Name="trash-2" Class="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+                <div class="flex gap-2">
+                    <textarea @bind="newCommentText" rows="2" maxlength="1000"
+                              placeholder="Encouragement, question, consigne pour cette journée — visible par le patient…"
+                              class="flex-1 bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none placeholder-gray-400"></textarea>
+                    <button @onclick="SendComment"
+                            class="self-end bg-volt hover:bg-volt-dark text-carbon px-4 py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[.08em] shadow-[0_2px_0_rgba(14,17,20,.18)] transition-colors">
+                        Envoyer
+                    </button>
                 </div>
             </div>
 
@@ -542,8 +617,48 @@ else
         await LoadReport();
     }
 
-    async Task LoadReport() =>
+    async Task LoadReport()
+    {
         report = await DiaryService.GetNutritionReportAsync(diary!.Id, Time.Today, reportDays);
+        weightHistory = await DiaryService.GetWeightHistoryAsync(diary!.Id, reportDays);
+    }
+
+    // ── Historique pondéral (rapport) ────────────────────────────────────────
+    List<WeightEntry> weightHistory = [];
+    static readonly System.Globalization.CultureInfo FrCulture = new("fr-FR");
+
+    // Points de la polyligne SVG (viewBox 300×64) : x au prorata du temps,
+    // y entre 8 et 56 sur l'amplitude min→max (amplitude nulle → ligne médiane).
+    string WeightPoints()
+    {
+        var first = weightHistory[0].Date.DayNumber;
+        var span = Math.Max(1, weightHistory[^1].Date.DayNumber - first);
+        var minW = weightHistory.Min(w => w.WeightKg);
+        var range = Math.Max(0.1, weightHistory.Max(w => w.WeightKg) - minW);
+        return string.Join(" ", weightHistory.Select(w =>
+        {
+            var x = (w.Date.DayNumber - first) / (double)span * 300;
+            var y = 56 - (w.WeightKg - minW) / range * 48;
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{x:0.#},{y:0.#}");
+        }));
+    }
+
+    // ── Commentaires au patient ──────────────────────────────────────────────
+    string newCommentText = "";
+
+    async Task SendComment()
+    {
+        if (string.IsNullOrWhiteSpace(newCommentText)) return;
+        await DiaryService.AddDayCommentAsync(diary!.Id, selectedDate, newCommentText, Session.NutritionistName);
+        newCommentText = "";
+        await LoadDay();
+    }
+
+    async Task DeleteComment(int commentId)
+    {
+        await DiaryService.DeleteDayCommentAsync(commentId);
+        await LoadDay();
+    }
 
     static string F0(double? v) => v is double d ? d.ToString("0") : "—";
     static string F1(double? v) => v is double d ? d.ToString("0.#") : "—";

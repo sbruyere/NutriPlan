@@ -158,6 +158,30 @@ using (var scope = app.Services.CreateScope())
     try { ctx.Database.ExecuteSqlRaw("ALTER TABLE CatalogFoods ADD COLUMN Source TEXT NOT NULL DEFAULT 'ciqual';"); }
     catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
 
+    // Historique pondéral et commentaires du praticien : tables absentes des bases
+    // créées avant leur introduction (mêmes FK/cascades que le modèle EF).
+    ctx.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "WeightEntries" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_WeightEntries" PRIMARY KEY AUTOINCREMENT,
+            "FoodDiaryId" INTEGER NOT NULL,
+            "Date" TEXT NOT NULL,
+            "WeightKg" REAL NOT NULL,
+            "CreatedAt" TEXT NOT NULL,
+            CONSTRAINT "FK_WeightEntries_FoodDiaries_FoodDiaryId" FOREIGN KEY ("FoodDiaryId") REFERENCES "FoodDiaries" ("Id") ON DELETE CASCADE);
+        """);
+    ctx.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WeightEntries_FoodDiaryId_Date\" ON \"WeightEntries\" (\"FoodDiaryId\", \"Date\");");
+    ctx.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "DayComments" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_DayComments" PRIMARY KEY AUTOINCREMENT,
+            "DailyLogId" INTEGER NOT NULL,
+            "Text" TEXT NOT NULL,
+            "AuthorName" TEXT NULL,
+            "ReadByPatient" INTEGER NOT NULL,
+            "CreatedAt" TEXT NOT NULL,
+            CONSTRAINT "FK_DayComments_DailyLogs_DailyLogId" FOREIGN KEY ("DailyLogId") REFERENCES "DailyLogs" ("Id") ON DELETE CASCADE);
+        """);
+    ctx.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_DayComments_DailyLogId\" ON \"DayComments\" (\"DailyLogId\");");
+
     // Seed au premier démarrage — ou re-seed si le référentiel date d'avant les
     // macronutriments (aucune ligne avec protéines) ou d'avant le complément USDA
     // (aucune ligne usda) : impossible sur un seed à jour.

@@ -41,4 +41,5 @@ public class FoodDiary
     public Nutritionist? Nutritionist { get; set; }
 
     public ICollection<DailyLog> DailyLogs { get; set; } = [];
+    public ICollection<WeightEntry> WeightEntries { get; set; } = [];
 }

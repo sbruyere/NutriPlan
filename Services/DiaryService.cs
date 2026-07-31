@@ -279,6 +279,7 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         var log = await ctx.DailyLogs
             .Include(l => l.Events.OrderBy(e => e.CreatedAt))
                 .ThenInclude(e => e.FoodEntries.OrderBy(f => f.CreatedAt))
+            .Include(l => l.Comments.OrderBy(c => c.CreatedAt))
             .FirstOrDefaultAsync(l => l.FoodDiaryId == diaryId && l.Date == date);
         if (log != null)
         {
@@ -608,6 +609,7 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         await using var ctx = await factory.CreateDbContextAsync();
         var diary = await ctx.FoodDiaries.FindAsync(diaryId);
         if (diary == null) return;
+        var previousWeight = diary.WeightKg;
         diary.Sex = sex is "F" or "M" ? sex : null;
         diary.HeightCm = heightCm;
         diary.WeightKg = weightKg;
@@ -615,7 +617,90 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         diary.ActivityLevel = ActivityLevels.Any(a => a.Key == activityLevel) ? activityLevel : null;
         diary.DailyKcalTarget = dailyKcalTarget;
         diary.DailyBurnTarget = dailyBurnTarget;
+        // Un poids modifié depuis le profil alimente aussi l'historique pondéral (pesée du jour).
+        if (weightKg is double kg && kg > 0 && Math.Abs((previousWeight ?? 0) - kg) > 0.01)
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var entry = await ctx.WeightEntries.FirstOrDefaultAsync(w => w.FoodDiaryId == diaryId && w.Date == today);
+            if (entry == null) ctx.WeightEntries.Add(new WeightEntry { FoodDiaryId = diaryId, Date = today, WeightKg = kg });
+            else entry.WeightKg = kg;
+        }
         await ctx.SaveChangesAsync();
+    }
+
+    // ── Historique pondéral ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Enregistre (ou remplace) la pesée d'un jour ; le profil reflète toujours la
+    /// pesée la plus récente. Retourne le poids « courant » du profil après opération.
+    /// </summary>
+    public async Task<double?> AddWeightAsync(int diaryId, DateOnly date, double weightKg)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        var diary = await ctx.FoodDiaries.FindAsync(diaryId);
+        if (diary == null || weightKg is <= 20 or >= 400) return diary?.WeightKg;
+        var entry = await ctx.WeightEntries.FirstOrDefaultAsync(w => w.FoodDiaryId == diaryId && w.Date == date);
+        if (entry == null) ctx.WeightEntries.Add(new WeightEntry { FoodDiaryId = diaryId, Date = date, WeightKg = weightKg });
+        else entry.WeightKg = weightKg;
+        var latestExisting = await ctx.WeightEntries
+            .Where(w => w.FoodDiaryId == diaryId)
+            .MaxAsync(w => (DateOnly?)w.Date);
+        if (latestExisting == null || date >= latestExisting)
+            diary.WeightKg = weightKg;
+        await ctx.SaveChangesAsync();
+        return diary.WeightKg;
+    }
+
+    public async Task<List<WeightEntry>> GetWeightHistoryAsync(int diaryId, int maxDays = 365)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        var since = DateOnly.FromDateTime(DateTime.Today).AddDays(-maxDays);
+        return await ctx.WeightEntries
+            .Where(w => w.FoodDiaryId == diaryId && w.Date >= since)
+            .OrderBy(w => w.Date)
+            .ToListAsync();
+    }
+
+    // ── Commentaires du praticien sur une journée ────────────────────────────
+
+    public async Task AddDayCommentAsync(int diaryId, DateOnly date, string text, string? authorName)
+    {
+        text = (text ?? "").Trim();
+        if (text.Length == 0) return;
+        var log = await GetOrCreateDailyLogAsync(diaryId, date);
+        await using var ctx = await factory.CreateDbContextAsync();
+        ctx.DayComments.Add(new DayComment
+        {
+            DailyLogId = log.Id,
+            Text = text.Length > 1000 ? text[..1000] : text,
+            AuthorName = authorName,
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    public async Task DeleteDayCommentAsync(int commentId)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        await ctx.DayComments.Where(c => c.Id == commentId).ExecuteDeleteAsync();
+    }
+
+    public async Task MarkDayCommentsReadAsync(int dailyLogId)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        await ctx.DayComments
+            .Where(c => c.DailyLogId == dailyLogId && !c.ReadByPatient)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ReadByPatient, true));
+    }
+
+    /// <summary>Jours portant des commentaires non lus (pour notifier à l'ouverture du carnet).</summary>
+    public async Task<List<DateOnly>> GetUnreadCommentDatesAsync(int diaryId)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        return await ctx.DayComments
+            .Where(c => !c.ReadByPatient && c.DailyLog.FoodDiaryId == diaryId)
+            .Select(c => c.DailyLog.Date)
+            .Distinct().OrderBy(d => d)
+            .ToListAsync();
     }
 
     // ── Analyse : corrélations sensations ↔ aliments ─────────────────────────

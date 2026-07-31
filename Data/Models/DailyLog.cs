@@ -24,4 +24,5 @@ public class DailyLog
     public string? GeneralNotes { get; set; }
 
     public ICollection<DayEvent> Events { get; set; } = [];
+    public ICollection<DayComment> Comments { get; set; } = [];
 }
