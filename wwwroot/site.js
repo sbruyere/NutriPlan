@@ -5,25 +5,63 @@ window.nutriplan = {
     print: () => window.print(),
     copyText: (text) => navigator.clipboard.writeText(text),
 
-    // Swipe horizontal (tactile) pour changer de jour dans le journal.
-    // Écouteurs passifs : le défilement vertical n'est jamais bloqué ; le geste
-    // n'est retenu que s'il est franc (≥ 60 px, nettement horizontal, < 600 ms).
-    attachDaySwipe: (id, dotnetRef) => {
-        const el = document.getElementById(id);
-        if (!el || el.dataset.swipeAttached) return;
-        el.dataset.swipeAttached = '1';
-        let x0 = 0, y0 = 0, t0 = 0, tracking = false;
-        el.addEventListener('touchstart', e => {
+    // Défilement page à page du journal : la piste (3 pages côte à côte, base
+    // translateX(-100%)) suit le doigt en temps réel. touch-action: pan-y sur le
+    // conteneur laisse le défilement vertical au navigateur — écouteurs passifs.
+    // Au lâcher : au-delà de 22 % de la largeur, la piste s'anime vers la page
+    // voisine puis .NET recharge et recale (resetPager) ; sinon retour élastique.
+    attachDayPager: (id, dotnetRef) => {
+        const wrap = document.getElementById(id);
+        if (!wrap || wrap.dataset.pagerAttached) return;
+        wrap.dataset.pagerAttached = '1';
+        const track = () => wrap.querySelector('[data-pager-track]');
+        let x0 = 0, y0 = 0, dx = 0, width = 1, active = false, horizontal = null, settling = false;
+        const setX = (px, animate) => {
+            const t = track();
+            if (!t) return;
+            t.style.transition = animate ? 'transform .26s cubic-bezier(.2,.7,.3,1)' : 'none';
+            t.style.transform = `translateX(calc(-100% + ${px}px))`;
+        };
+        wrap.addEventListener('touchstart', e => {
+            if (settling || e.touches.length !== 1 || wrap.dataset.pagerEnabled !== '1') { active = false; return; }
             const t = e.touches[0];
-            x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
-            tracking = e.touches.length === 1;
+            x0 = t.clientX; y0 = t.clientY; dx = 0; horizontal = null;
+            width = wrap.clientWidth || 1;
+            active = true;
         }, { passive: true });
-        el.addEventListener('touchend', e => {
-            if (!tracking) return;
-            tracking = false;
-            const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
-            if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - t0 < 600)
-                dotnetRef.invokeMethodAsync('OnDaySwipe', dx < 0 ? 'next' : 'prev');
+        wrap.addEventListener('touchmove', e => {
+            if (!active) return;
+            const t = e.touches[0];
+            dx = t.clientX - x0;
+            const dy = t.clientY - y0;
+            if (horizontal === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8))
+                horizontal = Math.abs(dx) > Math.abs(dy);
+            if (horizontal) {
+                // butée douce vers demain quand on est déjà sur aujourd'hui
+                const blocked = dx < 0 && wrap.dataset.canNext !== '1';
+                setX(blocked ? dx / 3 : dx, false);
+            }
         }, { passive: true });
+        wrap.addEventListener('touchend', () => {
+            if (!active) return;
+            active = false;
+            if (!horizontal) return;
+            const goNext = dx < 0;
+            const commit = Math.abs(dx) > width * 0.22 && (!goNext || wrap.dataset.canNext === '1');
+            if (!commit) { setX(0, true); return; }
+            settling = true;
+            setX(goNext ? -width : width, true);
+            setTimeout(() => {
+                dotnetRef.invokeMethodAsync('OnPagerSettled', goNext ? 'next' : 'prev')
+                    .finally(() => { settling = false; });
+            }, 270);
+        }, { passive: true });
+        wrap.addEventListener('touchcancel', () => { if (active) { active = false; if (horizontal) setX(0, true); } }, { passive: true });
+    },
+
+    // Recale la piste au centre sans animation, après le rechargement du contenu.
+    resetPager: (id) => {
+        const t = document.getElementById(id)?.querySelector('[data-pager-track]');
+        if (t) { t.style.transition = 'none'; t.style.transform = 'translateX(-100%)'; }
     },
 };

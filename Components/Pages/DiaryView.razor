@@ -423,10 +423,19 @@ else
         }
         else
         {
-            @* Conteneur stable pour les écouteurs tactiles (swipe gauche/droite = jour
-               suivant/précédent) ; le div interne, re-créé à chaque changement de date
-               (@key), rejoue l'animation de « page » qui glisse depuis le bon côté. *@
-            <div id="journal-swipe">
+            @* Défilement page à page : une piste 3 × 100 % (aperçu de la veille,
+               journée réelle, aperçu du lendemain) suivie par le doigt (touch-action
+               pan-y : le défilement vertical reste natif). Au lâcher, la piste
+               s'anime vers la page voisine puis le contenu se recale (resetPager).
+               Les journées ±3 sont préchargées en cache pour des swipes enchaînés. *@
+            <div id="journal-swipe" class="overflow-hidden" style="touch-action: pan-y;"
+                 data-pager-enabled="@(editingEventId == null && !showMoveDay && !tableView ? "1" : "0")"
+                 data-can-next="@(selectedDate < Time.Today ? "1" : "0")">
+            <div data-pager-track class="flex items-start" style="transform:translateX(-100%);">
+            <div class="w-full flex-shrink-0 print:hidden" aria-hidden="true">
+                <DayGlance Date="@selectedDate.AddDays(-1)" Log="@CachedLog(selectedDate.AddDays(-1))" />
+            </div>
+            <div class="w-full flex-shrink-0">
             <div @key="selectedDate" class="@swipeAnim">
             <!-- Navigation date -->
             <div class="flex items-end justify-between gap-2 pt-1">
@@ -745,6 +754,14 @@ else
                                   class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 resize-none border-0 placeholder-gray-400"></textarea>
                     </div>
                 </div>
+            </div>
+            </div>
+            </div>
+            <div class="w-full flex-shrink-0 print:hidden" aria-hidden="true">
+                @if (selectedDate < Time.Today)
+                {
+                    <DayGlance Date="@selectedDate.AddDays(1)" Log="@CachedLog(selectedDate.AddDays(1))" />
+                }
             </div>
             </div>
             </div>
@@ -1181,6 +1198,8 @@ else
     async Task LoadDay()
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
+        dayCache[selectedDate] = currentLog;
+        _ = PreloadNeighborsAsync();   // aperçus voisins du pager, en tâche de fond
         armedInsert = null;
         editingWeight = false;
         // Commentaires du nutritionniste : mémorise les non-lus (badge « Nouveau »
@@ -1218,29 +1237,77 @@ else
 
     // ── Changement de jour : chevrons et swipe tactile, avec animation de « page » ──
 
-    string swipeAnim = "";                              // classe d'animation du conteneur @key
+    string swipeAnim = "";                              // classe d'animation du conteneur @key (chevrons)
     DotNetObjectReference<DiaryView>? swipeRef;
+    bool pagerNeedsReset;                               // recaler la piste après un swipe abouti
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Idempotent (garde côté JS) : l'élément n'existe qu'une fois le carnet
         // déverrouillé, on retente donc à chaque rendu.
         swipeRef ??= DotNetObjectReference.Create(this);
-        try { await JS.InvokeVoidAsync("nutriplan.attachDaySwipe", "journal-swipe", swipeRef); }
+        try
+        {
+            await JS.InvokeVoidAsync("nutriplan.attachDayPager", "journal-swipe", swipeRef);
+            if (pagerNeedsReset)
+            {
+                pagerNeedsReset = false;
+                await JS.InvokeVoidAsync("nutriplan.resetPager", "journal-swipe");
+            }
+        }
         catch (JSDisconnectedException) { }
     }
 
     [JSInvokable]
-    public async Task OnDaySwipe(string direction)
+    public async Task OnPagerSettled(string direction)
     {
-        // Pas de changement de jour en pleine édition ni hors de la frise.
-        if (editingEventId != null || showHistory || showMoveDay || tableView) return;
-        if (direction == "next") await NextDay();
-        else await PreviousDay();
+        // La piste a déjà joué la transition : on change de jour SANS animation
+        // d'entrée supplémentaire, puis on recale la piste au centre.
+        if (editingEventId != null || showHistory || showMoveDay || tableView) { pagerNeedsReset = true; StateHasChanged(); return; }
+        swipeAnim = "";
+        editingEventId = null;
+        if (direction == "next")
+        {
+            if (selectedDate >= Time.Today) { pagerNeedsReset = true; StateHasChanged(); return; }
+            selectedDate = selectedDate.AddDays(1);
+        }
+        else
+        {
+            selectedDate = selectedDate.AddDays(-1);
+        }
+        await LoadDay();
+        pagerNeedsReset = true;
         StateHasChanged();
     }
 
     public void Dispose() => swipeRef?.Dispose();
+
+    // ── Cache des journées voisines : aperçus instantanés du pager ───────────
+    readonly Dictionary<DateOnly, DailyLog?> dayCache = [];
+
+    DailyLog? CachedLog(DateOnly date) => dayCache.TryGetValue(date, out var log) ? log : null;
+
+    // Précharge ±3 jours en tâche de fond ; les mutations du cache repassent par
+    // le dispatcher du circuit (pas de dictionnaire partagé entre threads).
+    async Task PreloadNeighborsAsync()
+    {
+        var center = selectedDate;
+        var wanted = Enumerable.Range(1, 3)
+            .SelectMany(i => new[] { center.AddDays(-i), center.AddDays(i) })
+            .Where(d => d <= Time.Today && !dayCache.ContainsKey(d))
+            .ToList();
+        if (wanted.Count == 0) return;
+        var fetched = new List<(DateOnly Date, DailyLog? Log)>();
+        foreach (var d in wanted)
+            fetched.Add((d, await DiaryService.GetDailyLogFullAsync(diary!.Id, d)));
+        await InvokeAsync(() =>
+        {
+            foreach (var (d, log) in fetched) dayCache[d] = log;
+            foreach (var stale in dayCache.Keys.Where(k => Math.Abs(k.DayNumber - selectedDate.DayNumber) > 4).ToList())
+                dayCache.Remove(stale);
+            StateHasChanged();
+        });
+    }
 
     async Task PreviousDay() { swipeAnim = "day-slide-in-left"; editingEventId = null; selectedDate = selectedDate.AddDays(-1); await LoadDay(); }
 

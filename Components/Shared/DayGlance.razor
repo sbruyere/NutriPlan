@@ -1,0 +1,130 @@
+@inject DiaryService DiaryService
+
+@* Aperçu NON interactif d'une journée — pages voisines du défilement page à
+   page du journal. Reprend la hiérarchie visuelle de la vue réelle (titre,
+   bilan charbon, frise compacte) pour que la transition vers la page complète
+   soit quasi invisible au moment où elle se substitue à l'aperçu. *@
+
+<div class="pt-1" aria-hidden="true">
+    <p class="font-display text-2xl font-extrabold tracking-tight leading-none text-carbon">
+        <span class="capitalize">@Date.ToString("dddd", Fr)</span>
+        @Date.ToString("d MMMM", Fr)
+    </p>
+
+    <div class="bg-carbon rounded-xl p-4 mt-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
+        <div class="flex items-center gap-1.5 mb-2.5">
+            <span class="w-1.5 h-1.5 bg-volt inline-block"></span>
+            <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">Bilan du jour</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+            <div>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@FilledMeals<span class="text-[11px] text-snow">/@DiaryService.MealSlots.Length</span></p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Repas</p>
+            </div>
+            <div>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@(KcalIn > 0 ? $"≈ {KcalIn}" : "—")</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Kcal ingérées</p>
+            </div>
+            <div>
+                <p class="font-display text-xl font-extrabold text-volt leading-none">@(ActivityMin > 0 ? FormatMin(ActivityMin) : "—")</p>
+                <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1">Activité</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Frise compacte : jalons remplis/fantômes + activités -->
+    <div class="relative pl-[60px] mt-5">
+        <div class="absolute left-[50px] top-2 bottom-2 w-[2px] bg-[#cbd3da]"></div>
+        <div class="space-y-4">
+            @foreach (var row in Rows())
+            {
+                <div class="relative">
+                    <span class="absolute -left-[60px] top-[10px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#9aa4ad]">@row.Time.ToString(@"HH\:mm")</span>
+                    <span class="absolute -left-[13px] top-[13px] w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] @(row.IsActivity ? "bg-carbon" : row.Filled ? "bg-volt" : "bg-[#aeb8c0]")"></span>
+                    @if (row.IsActivity)
+                    {
+                        <div class="bg-carbon rounded-xl px-4 py-3">
+                            <p class="text-[8px] font-extrabold uppercase tracking-[.14em] text-volt">Activité</p>
+                            <p class="font-display text-[14px] font-extrabold text-snow leading-tight">@row.Title</p>
+                            @if (!string.IsNullOrEmpty(row.Detail))
+                            {
+                                <p class="text-[11px] text-[#9aa4ad] mt-0.5">@row.Detail</p>
+                            }
+                        </div>
+                    }
+                    else if (row.Filled)
+                    {
+                        <div class="bg-white rounded-xl px-4 py-3 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
+                            <p class="font-display text-[14px] font-extrabold text-carbon leading-tight">@row.Title</p>
+                            @if (!string.IsNullOrEmpty(row.Detail))
+                            {
+                                <p class="text-[12px] text-gray-600 mt-1 leading-snug">@row.Detail</p>
+                            }
+                            @if (row.Kcal is int rk and > 0)
+                            {
+                                <span class="inline-block bg-carbon text-volt rounded-[5px] px-2 py-1 text-[8.5px] font-extrabold uppercase tracking-[.1em] mt-2">≈ @rk kcal</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[repeating-linear-gradient(135deg,#dde3e9_0_7px,#e4e9ee_7px_14px)]">
+                            <span class="flex-1 font-display text-[13px] font-extrabold text-[#69737d]">@row.Title</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+    [Parameter] public DailyLog? Log { get; set; }
+
+    static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
+
+    record GlanceRow(TimeOnly Time, string Title, string? Detail, bool Filled, bool IsActivity, int? Kcal);
+
+    int FilledMeals => Log?.Events.Count(e => e.EventType == DayEventType.Meal
+        && (e.FoodEntries.Count > 0 || e.Photos.Count > 0 || e.DrinkEntries.Count > 0)) ?? 0;
+
+    int KcalIn => (int)Math.Round(Log?.Events.Where(e => e.EventType == DayEventType.Meal)
+        .SelectMany(e => e.FoodEntries).Sum(f => DiaryService.EstimateKcal(f) ?? 0) ?? 0);
+
+    int ActivityMin => Log?.Events.Where(e => e.EventType == DayEventType.Activity).Sum(e => e.DurationMinutes ?? 0) ?? 0;
+
+    static string FormatMin(int m) => m >= 60 ? $"{m / 60}h{m % 60:00}" : $"{m} min";
+
+    IEnumerable<GlanceRow> Rows()
+    {
+        var events = Log?.Events ?? [];
+        var rows = new List<GlanceRow>();
+        for (var i = 0; i < DiaryService.MealSlots.Length; i++)
+        {
+            var slot = DiaryService.MealSlots[i];
+            var meal = events.FirstOrDefault(e => e.MealSlot == i);
+            var foods = meal == null ? "" : string.Join(" · ", meal.FoodEntries
+                .OrderBy(f => f.SortOrder).Select(f => f.FoodName).Take(5));
+            var kcal = meal == null ? (int?)null
+                : (int)Math.Round(meal.FoodEntries.Sum(f => DiaryService.EstimateKcal(f) ?? 0));
+            rows.Add(new GlanceRow(
+                meal?.Time ?? slot.DefaultTime,
+                string.IsNullOrWhiteSpace(meal?.Label) ? slot.Label : meal!.Label,
+                foods,
+                meal != null && (meal.FoodEntries.Count > 0 || meal.Photos.Count > 0 || meal.DrinkEntries.Count > 0),
+                false,
+                kcal));
+        }
+        foreach (var act in events.Where(e => e.EventType == DayEventType.Activity))
+        {
+            var parts = new List<string>();
+            if (act.DurationMinutes is int dm and > 0) parts.Add($"{dm} min");
+            if (!string.IsNullOrEmpty(act.Intensity)) parts.Add(act.Intensity);
+            if (act.CaloriesBurned is int cb and > 0) parts.Add($"−{cb} kcal");
+            if (act.DistanceKm is double km and > 0) parts.Add(string.Format(Fr, "{0:0.#} km", km));
+            rows.Add(new GlanceRow(act.Time ?? new TimeOnly(12, 0), act.Label, string.Join(" · ", parts), true, true, null));
+        }
+        return rows.OrderBy(r => r.Time);
+    }
+}
