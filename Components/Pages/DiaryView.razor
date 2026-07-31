@@ -567,8 +567,20 @@ else
                             @(diary!.WeightKg is double pw ? $"{pw:0.#} kg" : "à renseigner")
                             <span class="text-[10px] text-[#79838c] font-normal" aria-hidden="true">✎</span>
                         </button>
+                        @if (diary!.TargetWeightKg is double twp)
+                        {
+                            <span class="text-[10px] text-[#79838c] font-bold">· cible @twp.ToString("0.#") kg</span>
+                        }
                     }
                 </div>
+                @if (ShowWeighReminder)
+                {
+                    <p class="text-[10px] text-[#9aa4ad] mt-1.5 print:hidden">
+                        ⚖️ @(lastWeighDate == null ? "Aucune pesée enregistrée" : $"Dernière pesée il y a {Time.Today.DayNumber - lastWeighDate.Value.DayNumber} jours")
+                        — un relevé régulier aide votre suivi.
+                        <button @onclick="StartWeightEdit" class="font-bold text-snow underline decoration-volt decoration-2 underline-offset-2 hover:text-volt">Se peser</button>
+                    </p>
+                }
                 <div class="flex gap-1 mt-3" aria-hidden="true">
                     @for (var seg = 0; seg < DiaryService.MealSlots.Length; seg++)
                     {
@@ -593,6 +605,17 @@ else
                                 }
                             </p>
                             <p class="text-[13px] text-gray-700 leading-relaxed mt-1.5">@dayComment.Text</p>
+                            @* Réaction rapide : un tap répond sans clavier ; re-tap = retirer *@
+                            <div class="flex items-center gap-1.5 mt-2 print:hidden">
+                                @foreach (var reaction in new[] { "👍", "Merci !" })
+                                {
+                                    var rx = reaction;
+                                    var c = dayComment;
+                                    <button @onclick="() => ReactToComment(c, rx)"
+                                            class="text-[11px] font-bold px-2.5 py-1 rounded-[5px] border transition-colors
+                                                   @(c.PatientReaction == rx ? "bg-carbon text-volt border-carbon" : "bg-white border-slate-200 text-gray-500 hover:bg-slate-50")">@rx</button>
+                                }
+                            </div>
                         </div>
                     }
                 </div>
@@ -1189,9 +1212,24 @@ else
         if (diary != null && weightInput is double kg and > 20 and < 400)
         {
             diary.WeightKg = await DiaryService.AddWeightAsync(diary.Id, selectedDate, kg);
+            if (lastWeighDate == null || selectedDate > lastWeighDate) lastWeighDate = selectedDate;
             Toast.ShowSuccess($"Pesée enregistrée : {kg:0.#} kg");
         }
         editingWeight = false;
+    }
+
+    // ── Rappel de pesée doux : date de la dernière pesée, chargée une fois ────
+    DateOnly? lastWeighDate;
+    bool weighChecked;
+
+    bool ShowWeighReminder => selectedDate == Time.Today && weighChecked
+        && (lastWeighDate == null || Time.Today.DayNumber - lastWeighDate.Value.DayNumber > 7);
+
+    async Task ReactToComment(DayComment comment, string reaction)
+    {
+        var newValue = comment.PatientReaction == reaction ? null : reaction;
+        await DiaryService.SetDayCommentReactionAsync(comment.Id, newValue);
+        comment.PatientReaction = newValue;
     }
 
     // ── Commentaires du praticien : badge « Nouveau » + notification ─────────
@@ -1202,6 +1240,12 @@ else
     {
         currentLog = await DiaryService.GetDailyLogFullAsync(diary!.Id, selectedDate);
         dayCache[selectedDate] = currentLog;
+        if (!weighChecked)
+        {
+            weighChecked = true;
+            var history = await DiaryService.GetWeightHistoryAsync(diary.Id);
+            lastWeighDate = history.Count > 0 ? history[^1].Date : null;
+        }
         // Les voisins immédiats sont chargés AVANT le rendu (les aperçus du pager
         // ne doivent jamais apparaître vides) ; ±2/3 suivent en tâche de fond.
         foreach (var d in new[] { selectedDate.AddDays(-1), selectedDate.AddDays(1) })

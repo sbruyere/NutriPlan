@@ -386,6 +386,7 @@
         if (a.CaloriesBurned is > 0) parts.Add($"−{a.CaloriesBurned} kcal");
         if (a.DistanceKm is > 0) parts.Add(string.Format(FrCulture, "{0:0.#} km", a.DistanceKm));
         if (a.ElevationM is > 0) parts.Add($"D+ {a.ElevationM} m");
+        if (a.AvgHeartRate is > 0) parts.Add($"♥ {a.AvgHeartRate} bpm");
         return string.Join(" · ", parts);
     }
 

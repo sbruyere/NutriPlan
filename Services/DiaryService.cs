@@ -72,16 +72,34 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
     public async Task<FoodDiary?> GetDiaryByCodeAsync(string accessCode)
     {
         await using var ctx = await factory.CreateDbContextAsync();
-        return await ctx.FoodDiaries.FirstOrDefaultAsync(d => d.AccessCode == accessCode);
+        var diary = await ctx.FoodDiaries.FirstOrDefaultAsync(d => d.AccessCode == accessCode);
+        // Ralentit l'énumération de codes : un échec coûte toujours ~250 ms.
+        if (diary == null) await Task.Delay(250);
+        return diary;
     }
+
+    // Anti-force-brute PIN : 5 échecs sur un carnet → verrou 5 minutes.
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int Fails, DateTime LockedUntil)> pinAttempts = new();
 
     public async Task<bool> ValidatePinAsync(string accessCode, string pin)
     {
+        if (pinAttempts.TryGetValue(accessCode, out var state) && state.LockedUntil > DateTime.UtcNow)
+            return false;
         await using var ctx = await factory.CreateDbContextAsync();
         var diary = await ctx.FoodDiaries.FirstOrDefaultAsync(d => d.AccessCode == accessCode);
         if (diary == null) return false;
-        if (diary.PinHash == null) return true;
-        return BCrypt.Net.BCrypt.Verify(pin, diary.PinHash);
+        var ok = diary.PinHash == null || BCrypt.Net.BCrypt.Verify(pin, diary.PinHash);
+        if (ok)
+        {
+            pinAttempts.TryRemove(accessCode, out _);
+        }
+        else
+        {
+            var fails = (pinAttempts.TryGetValue(accessCode, out var s) ? s.Fails : 0) + 1;
+            pinAttempts[accessCode] = (fails, fails >= 5 ? DateTime.UtcNow.AddMinutes(5) : DateTime.MinValue);
+            await Task.Delay(300);
+        }
+        return ok;
     }
 
     public async Task<List<FoodDiary>> GetNutritionistDiariesAsync(int nutritionistId)
@@ -684,6 +702,25 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         await ctx.DayComments.Where(c => c.Id == commentId).ExecuteDeleteAsync();
     }
 
+    /// <summary>Réaction rapide du patient à un commentaire (null = retirer).</summary>
+    public async Task SetDayCommentReactionAsync(int commentId, string? reaction)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        await ctx.DayComments.Where(c => c.Id == commentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.PatientReaction, reaction));
+    }
+
+    /// <summary>Poids cible fixé par le nutritionniste (null = retirer).</summary>
+    public async Task SetTargetWeightAsync(int diaryId, double? targetKg)
+    {
+        await using var ctx = await factory.CreateDbContextAsync();
+        if (await ctx.FoodDiaries.FindAsync(diaryId) is { } diary)
+        {
+            diary.TargetWeightKg = targetKg is > 20 and < 400 ? targetKg : null;
+            await ctx.SaveChangesAsync();
+        }
+    }
+
     public async Task MarkDayCommentsReadAsync(int dailyLogId)
     {
         await using var ctx = await factory.CreateDbContextAsync();
@@ -787,7 +824,12 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         double? AvgHunger, double? AvgSatiety, int EmotionalMealCount,
         double? AvgEatingWindowHours, int BreakfastSkippedDays, double AvgMealsPerDay,
         List<(string Emotion, int Count)> TopEmotions,
-        List<SymptomCorrelation> Correlations);
+        List<SymptomCorrelation> Correlations,
+        // Périodisation simple : moyennes scindées jours d'entraînement (≥ 45 min
+        // d'activité) vs jours de repos.
+        int TrainingDays, int RestDays,
+        double? TrainKcal, double? TrainCarbsG, double? TrainProteinG,
+        double? RestKcal, double? RestCarbsG, double? RestProteinG);
 
     public async Task<NutritionReport> GetNutritionReportAsync(int diaryId, DateOnly endDate, int days)
     {
@@ -838,6 +880,17 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
 
         var correlations = await GetSymptomCorrelationsAsync(diaryId, endDate);
 
+        // ── Jours d'entraînement (≥ 45 min d'activité) vs jours de repos ──
+        bool IsTrainingDay(DailyLog l) => l.Events
+            .Where(e => e.EventType == DayEventType.Activity)
+            .Sum(e => e.DurationMinutes ?? 0) >= 45;
+        var trainLogs = filledLogs.Where(IsTrainingDay).ToList();
+        var restLogs = filledLogs.Where(l => !IsTrainingDay(l)).ToList();
+        double? GroupAvg(List<DailyLog> group, Func<CatalogFood, double?> per100) =>
+            group.Count == 0 || linkedFoods == 0 ? null
+            : group.Average(l => l.Events.Where(e => e.EventType == DayEventType.Meal)
+                .SelectMany(e => e.FoodEntries).Sum(f => EstimateNutrient(f, per100) ?? 0));
+
         return new NutritionReport(
             days, daysWithData, meals.Count,
             Avg(totalKcal), Avg(totalProt), Avg(totalCarb), Avg(totalSugar),
@@ -853,7 +906,10 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
             breakfastSkipped,
             daysWithData > 0 ? (double)meals.Count / daysWithData : 0,
             topEmotions,
-            correlations);
+            correlations,
+            trainLogs.Count, restLogs.Count,
+            GroupAvg(trainLogs, c => c.KcalPer100g), GroupAvg(trainLogs, c => c.CarbsPer100g), GroupAvg(trainLogs, c => c.ProteinPer100g),
+            GroupAvg(restLogs, c => c.KcalPer100g), GroupAvg(restLogs, c => c.CarbsPer100g), GroupAvg(restLogs, c => c.ProteinPer100g));
     }
 
     // ── Référentiel Ciqual ───────────────────────────────────────────────────
@@ -1046,10 +1102,13 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         if (entry != null) { ctx.FoodEntries.Remove(entry); await ctx.SaveChangesAsync(); }
     }
 
+    // Le code d'accès est l'unique credential d'un carnet sans PIN : générateur
+    // cryptographique obligatoire (new Random() est prédictible par sa graine).
     private static string GenerateAccessCode()
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        var random = new Random();
-        return new string(Enumerable.Range(0, 8).Select(_ => chars[random.Next(chars.Length)]).ToArray());
+        return new string(Enumerable.Range(0, 8)
+            .Select(_ => chars[System.Security.Cryptography.RandomNumberGenerator.GetInt32(chars.Length)])
+            .ToArray());
     }
 }

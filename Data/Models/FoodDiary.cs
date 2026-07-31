@@ -29,6 +29,7 @@ public class FoodDiary
     [MaxLength(30)] public string? ActivityLevel { get; set; } // clé DiaryService.ActivityLevels
     public int? DailyKcalTarget { get; set; }                  // plafond d'apport journalier (kcal)
     public int? DailyBurnTarget { get; set; }                  // objectif de dépense sportive (kcal)
+    public double? TargetWeightKg { get; set; }                // poids cible fixé par le nutritionniste
 
     // ── Intégration Strava (OAuth par carnet) ──
     public long? StravaAthleteId { get; set; }

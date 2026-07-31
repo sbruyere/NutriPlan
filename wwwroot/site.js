@@ -66,3 +66,9 @@ window.nutriplan = {
         if (t) { t.style.transition = 'none'; t.style.transform = 'translateX(calc(-100% - 24px))'; }
     },
 };
+
+// PWA : service worker minimal (aucune interception réseau — SignalR intact),
+// requis pour l'installation sur Android. Échec silencieux si non supporté.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => { });
+}

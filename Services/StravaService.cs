@@ -57,6 +57,9 @@ public class StravaService(
         [property: JsonPropertyName("sport_type")] string? SportType,
         [property: JsonPropertyName("start_date_local")] DateTime StartDateLocal,
         [property: JsonPropertyName("calories")] double? Calories,
+        [property: JsonPropertyName("average_heartrate")] double? AverageHeartRate,
+        [property: JsonPropertyName("max_heartrate")] double? MaxHeartRate,
+        [property: JsonPropertyName("suffer_score")] double? SufferScore,
         [property: JsonPropertyName("photos")] PhotoSummaryDto? Photos);
 
     record PhotoSummaryDto([property: JsonPropertyName("primary")] PrimaryPhotoDto? Primary);
@@ -201,6 +204,28 @@ public class StravaService(
         }
     }
 
+    // Intensité déduite du cardio importé : % de FC max théorique (220 − âge) si le
+    // profil donne l'année de naissance, sinon Relative Effort rapporté à l'heure.
+    // Seuils classiques : < 64 % FCmax = légère, 64-76 % = modérée, > 76 % = intense.
+    static string? DeriveIntensity(double? avgHr, double? sufferScore, double? durationMin, int? birthYear)
+    {
+        if (avgHr is double hr && hr > 0 && birthYear is int by)
+        {
+            var age = DateTime.UtcNow.Year - by;
+            if (age is > 10 and < 110)
+            {
+                var pct = hr / (220.0 - age);
+                return pct < 0.64 ? "Légère" : pct <= 0.76 ? "Modérée" : "Intense";
+            }
+        }
+        if (sufferScore is double ss && ss > 0 && durationMin is double min && min >= 10)
+        {
+            var perHour = ss / (min / 60.0);
+            return perHour < 30 ? "Légère" : perHour <= 70 ? "Modérée" : "Intense";
+        }
+        return null;
+    }
+
     async Task<(int Imported, string? Error)> SyncCoreAsync(int diaryId)
     {
         if (!IsConfigured) return (0, "Strava n'est pas configuré côté serveur.");
@@ -247,8 +272,8 @@ public class StravaService(
             var date = DateOnly.FromDateTime(act.StartDateLocal);
             var log = await diaryService.GetOrCreateDailyLogAsync(diaryId, date);
 
-            // kcal et photo principale ne sont que dans le détail (appel par activité, plafonné).
-            double? calories = null;
+            // kcal, cardio et photo principale ne sont que dans le détail (appel par activité, plafonné).
+            double? calories = null, avgHr = null, maxHr = null, suffer = null;
             string? photoUrl = null;
             if (imported < MaxDetailCallsPerSync)
             {
@@ -256,6 +281,9 @@ public class StravaService(
                 {
                     var detail = await http.GetFromJsonAsync<ActivityDto>($"{ApiBase}/activities/{act.Id}");
                     calories = detail?.Calories;
+                    avgHr = detail?.AverageHeartRate;
+                    maxHr = detail?.MaxHeartRate;
+                    suffer = detail?.SufferScore;
                     photoUrl = detail?.Photos?.Primary?.Urls?
                         .OrderByDescending(u => int.TryParse(u.Key, out var size) ? size : 0)
                         .Select(u => u.Value)
@@ -274,6 +302,11 @@ public class StravaService(
                 DistanceKm = act.DistanceMeters > 0 ? Math.Round(act.DistanceMeters / 1000.0, 2) : null,
                 ElevationM = act.ElevationGain > 0 ? (int)Math.Round(act.ElevationGain) : null,
                 CaloriesBurned = calories is double kcal && kcal > 0 ? (int)Math.Round(kcal) : null,
+                AvgHeartRate = avgHr is double ah && ah > 0 ? (int)Math.Round(ah) : null,
+                MaxHeartRate = maxHr is double mh && mh > 0 ? (int)Math.Round(mh) : null,
+                SufferScore = suffer is double ss && ss > 0 ? ss : null,
+                Intensity = DeriveIntensity(avgHr, suffer,
+                    act.MovingTimeSeconds > 0 ? act.MovingTimeSeconds / 60.0 : null, diary.BirthYear),
                 StravaActivityId = act.Id,
                 CreatedAt = DateTime.UtcNow,
             };

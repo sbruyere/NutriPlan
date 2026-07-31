@@ -24,6 +24,10 @@ public class DayEvent
     public double? DistanceKm { get; set; }         // distance parcourue (optionnel)
     public int? ElevationM { get; set; }            // dénivelé positif en mètres (optionnel)
     public long? StravaActivityId { get; set; }     // activité importée de Strava (anti-doublon)
+    // Cardio importé de Strava (déjà présent dans la réponse détail — aucun appel en plus)
+    public int? AvgHeartRate { get; set; }          // FC moyenne (bpm)
+    public int? MaxHeartRate { get; set; }          // FC max (bpm)
+    public double? SufferScore { get; set; }        // Relative Effort Strava
     [MaxLength(500)] public string? ActivityNotes { get; set; }
     public int? MealSlot { get; set; }               // 0-5 pour les jalons prédéfinis, null sinon
     public int? ActivityAfterSlot { get; set; }      // activité entre jalons : après le jalon N (null = avant le 1er)

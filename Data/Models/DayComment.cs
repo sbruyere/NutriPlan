@@ -20,5 +20,9 @@ public class DayComment
 
     public bool ReadByPatient { get; set; }
 
+    // Réaction rapide du patient (« 👍 » / « Merci ! ») — boucle de retour légère.
+    [MaxLength(20)]
+    public string? PatientReaction { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

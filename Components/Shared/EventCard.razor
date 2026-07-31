@@ -107,6 +107,7 @@
                     @if (caloriesBurned is int burned && burned > 0) { <span class="font-display text-[12.5px] font-extrabold text-snow tabular-nums">−@burned kcal</span> }
                     @if (distanceKm is double km && km > 0) { <span class="font-semibold tabular-nums">@km.ToString("0.#") km</span> }
                     @if (elevationM is int dplus && dplus > 0) { <span class="font-semibold tabular-nums">D+ @dplus m</span> }
+                    @if (Event.AvgHeartRate is int bpm && bpm > 0) { <span class="font-semibold tabular-nums">♥ @bpm bpm</span> }
                     @if (IntensityTicks > 0)
                     {
                         <span class="inline-flex gap-[3px] ml-auto" aria-hidden="true">

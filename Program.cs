@@ -177,10 +177,19 @@ using (var scope = app.Services.CreateScope())
             "Text" TEXT NOT NULL,
             "AuthorName" TEXT NULL,
             "ReadByPatient" INTEGER NOT NULL,
+            "PatientReaction" TEXT NULL,
             "CreatedAt" TEXT NOT NULL,
             CONSTRAINT "FK_DayComments_DailyLogs_DailyLogId" FOREIGN KEY ("DailyLogId") REFERENCES "DailyLogs" ("Id") ON DELETE CASCADE);
         """);
     ctx.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_DayComments_DailyLogId\" ON \"DayComments\" (\"DailyLogId\");");
+    // Colonnes ajoutées après l'introduction des tables ci-dessus.
+    foreach (var lateCol in new[] { "DayComments|PatientReaction TEXT", "FoodDiaries|TargetWeightKg REAL",
+                                    "DayEvents|AvgHeartRate INTEGER", "DayEvents|MaxHeartRate INTEGER", "DayEvents|SufferScore REAL" })
+    {
+        var parts = lateCol.Split('|');
+        try { ctx.Database.ExecuteSqlRaw($"ALTER TABLE {parts[0]} ADD COLUMN {parts[1]};"); }
+        catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
+    }
 
     // Seed au premier démarrage — ou re-seed si le référentiel date d'avant les
     // macronutriments (aucune ligne avec protéines) ou d'avant le complément USDA
