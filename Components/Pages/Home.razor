@@ -49,7 +49,9 @@
             }
             @if (Strava.IsConfigured)
             {
-                <a href="@Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", "login")"
+                @* Scope minimal « read » : couvert par toute autorisation existante →
+                   redirection silencieuse, pas de reconsentement à chaque connexion *@
+                <a href="@Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", "login", "read")"
                    class="inline-flex items-center gap-1 text-xs font-bold text-[#fc4c02] hover:underline mt-2.5">
                     Ou continuer avec Strava →
                 </a>

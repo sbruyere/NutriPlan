@@ -197,7 +197,7 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 
 // ── Callback OAuth Strava : échange du code puis retour au journal ──────────
-app.MapGet("/strava/callback", async (string? code, string? state, string? error,
+app.MapGet("/strava/callback", async (string? code, string? state, string? error, string? scope,
     NutriPlan.Services.StravaService strava) =>
 {
     var accessCode = (state ?? "").Trim().ToUpperInvariant();
@@ -217,9 +217,13 @@ app.MapGet("/strava/callback", async (string? code, string? state, string? error
     string? ticket = null;
     if (string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code))
         ticket = await strava.ConnectAsync(accessCode, code);
-    return Results.Redirect(ticket == null
-        ? $"/carnet/{accessCode}/journal?strava=failed"
-        : $"/carnet/{accessCode}/journal?strava=ok&sat={ticket}");
+    if (ticket == null)
+        return Results.Redirect($"/carnet/{accessCode}/journal?strava=failed");
+    // Strava renvoie le scope réellement accordé : sans activity:read_all (case
+    // « activités privées » décochée), l'import sera partiel ET chaque nouvelle
+    // demande de ce scope rouvrirait le consentement — on prévient l'utilisateur.
+    var partial = scope != null && !scope.Contains("activity:read_all");
+    return Results.Redirect($"/carnet/{accessCode}/journal?strava={(partial ? "partial" : "ok")}&sat={ticket}");
 });
 
 app.MapRazorComponents<App>()

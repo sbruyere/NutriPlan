@@ -798,7 +798,9 @@ else
     string? pendingStravaTicket;
 
     string StravaAuthorizeUrl => Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", AccessCode);
-    string StravaLoginUrl => Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", "login");
+    // Scope minimal « read » : toujours couvert par l'autorisation existante, donc
+    // Strava redirige sans rouvrir l'écran de consentement (approval_prompt=auto).
+    string StravaLoginUrl => Strava.GetAuthorizeUrl($"{Nav.BaseUri}strava/callback", "login", "read");
 
     async Task SyncStrava()
     {
@@ -1043,6 +1045,11 @@ else
         if (Nav.Uri.Contains("strava=ok"))
         {
             Toast.ShowSuccess("Strava connecté ✓");
+            Nav.NavigateTo($"/carnet/{AccessCode}/journal", replace: true);
+        }
+        else if (Nav.Uri.Contains("strava=partial"))
+        {
+            Toast.ShowError("Strava connecté, mais sans l'accès aux activités privées : elles ne seront pas importées. Pour tout importer, reconnectez Strava en cochant la case « activités privées ».");
             Nav.NavigateTo($"/carnet/{AccessCode}/journal", replace: true);
         }
         else if (Nav.Uri.Contains("strava=failed"))

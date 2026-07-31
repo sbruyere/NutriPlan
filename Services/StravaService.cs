@@ -24,13 +24,18 @@ public class StravaService(
 
     public bool IsConfigured => !string.IsNullOrEmpty(ClientId) && !string.IsNullOrEmpty(ClientSecret);
 
-    public string GetAuthorizeUrl(string redirectUri, string accessCode) =>
+    // scope par défaut : import complet des activités (connexion initiale d'un carnet).
+    // Les flux quotidiens (login depuis l'accueil, verrou d'un carnet lié) passent
+    // scope "read" : ce scope minimal est TOUJOURS inclus dans une autorisation déjà
+    // accordée, donc avec approval_prompt=auto Strava redirige silencieusement au
+    // lieu de rouvrir l'écran de consentement à chaque connexion.
+    public string GetAuthorizeUrl(string redirectUri, string accessCode, string scope = "activity:read_all") =>
         "https://www.strava.com/oauth/authorize" +
         $"?client_id={Uri.EscapeDataString(ClientId ?? "")}" +
         "&response_type=code" +
         $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
         "&approval_prompt=auto" +
-        "&scope=activity:read_all" +
+        $"&scope={Uri.EscapeDataString(scope)}" +
         $"&state={Uri.EscapeDataString(accessCode)}";
 
     // ── DTO Strava (champs snake_case) ───────────────────────────────────────
@@ -151,11 +156,9 @@ public class StravaService(
             .FirstOrDefaultAsync();
         if (diary == null) return null;
 
-        // La connexion vient de renouveler les jetons : on en profite pour les stocker.
-        diary.StravaAccessToken = token.AccessToken;
-        diary.StravaRefreshToken = token.RefreshToken;
-        diary.StravaTokenExpiresAt = token.ExpiresAt;
-        await ctx.SaveChangesAsync();
+        // Ne PAS écraser les jetons ici : le login n'est demandé qu'avec le scope
+        // minimal « read » — stocker ce jeton dégraderait les droits de la synchro
+        // (activity:read_all), accordés lors de la connexion initiale du carnet.
         return (diary.AccessCode, IssueLoginTicket(diary.Id));
     }
 
