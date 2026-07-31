@@ -762,7 +762,8 @@ else
             <div class="w-full flex-shrink-0 print:hidden" aria-hidden="true">
                 @if (selectedDate < Time.Today)
                 {
-                    <DayGlance Date="@selectedDate.AddDays(1)" Log="@CachedLog(selectedDate.AddDays(1))" Diary="@diary" />
+                    <DayGlance Date="@selectedDate.AddDays(1)" Log="@CachedLog(selectedDate.AddDays(1))" Diary="@diary"
+                               IsToday="@(selectedDate.AddDays(1) == Time.Today)" />
                 }
             </div>
             </div>
@@ -1282,8 +1283,13 @@ else
         {
             selectedDate = selectedDate.AddDays(-1);
         }
-        await LoadDay();
+        // Rendu immédiat depuis le cache (les voisins y sont toujours) : la page
+        // interactive remplace l'aperçu sans attendre la base de données…
+        if (dayCache.TryGetValue(selectedDate, out var cached)) currentLog = cached;
         pagerNeedsReset = true;
+        StateHasChanged();
+        // …puis LoadDay fait foi (balayage, commentaires, préchargement des suivants).
+        await LoadDay();
         StateHasChanged();
     }
 

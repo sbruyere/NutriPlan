@@ -1,15 +1,29 @@
 @inject DiaryService DiaryService
 
 @* Aperçu NON interactif d'une journée — pages voisines du défilement page à
-   page du journal. Reprend la hiérarchie visuelle de la vue réelle (titre,
-   bilan charbon, frise compacte) pour que la transition vers la page complète
-   soit quasi invisible au moment où elle se substitue à l'aperçu. *@
+   page du journal. Rend les VRAIES EventCards en mode lecture (photos, chips,
+   faim→rassasié…) et reproduit l'en-tête, le bilan, les coutures, les jalons
+   fantômes et les notes : la page interactive se substitue à l'aperçu au
+   recalage sans différence visible. pointer-events-none : rien n'est cliquable. *@
 
-<div class="pt-1" aria-hidden="true">
-    <p class="font-display text-2xl font-extrabold tracking-tight leading-none text-carbon">
-        <span class="capitalize">@Date.ToString("dddd", Fr)</span>
-        @Date.ToString("d MMMM", Fr)
-    </p>
+<div class="pt-1 pointer-events-none select-none" aria-hidden="true">
+    <!-- Navigation date (chevrons décoratifs, parité de hauteur) -->
+    <div class="flex items-end justify-between gap-2">
+        <div class="min-w-0">
+            <p class="font-display text-2xl font-extrabold tracking-tight leading-none text-carbon">
+                <span class="capitalize">@Date.ToString("dddd", Fr)</span>
+                @Date.ToString("d MMMM", Fr)
+            </p>
+            @if (IsToday)
+            {
+                <p class="inline-block text-[9px] font-extrabold uppercase tracking-[.14em] bg-carbon text-volt px-2 py-1 rounded-[4px] mt-1.5">Aujourd'hui</p>
+            }
+        </div>
+        <div class="flex items-center flex-shrink-0">
+            <span class="p-2 rounded-full text-gray-400"><Icon Name="chevron-left" Class="w-5 h-5" /></span>
+            <span class="p-2 rounded-full text-gray-400 @(IsToday ? "opacity-30" : "")"><Icon Name="chevron-right" Class="w-5 h-5" /></span>
+        </div>
+    </div>
 
     <div class="bg-carbon rounded-xl p-4 mt-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
         <div class="flex items-center gap-1.5 mb-2.5">
@@ -42,6 +56,27 @@
                 <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Bilan</p>
             </div>
         </div>
+        @if (Bmr is double bmr && Needs is double needs)
+        {
+            <p class="text-[8.5px] uppercase tracking-[.12em] text-[#79838c] font-bold mt-2.5 leading-relaxed">
+                MB ≈ @((int)bmr) kcal · Besoins ≈ @((int)needs) kcal/j
+                @if (Diary?.DailyKcalTarget is int limitK && limitK > 0)
+                {
+                    <span class="@(KcalIn > limitK ? "text-[#ff8a75]" : "text-volt")"> · Plafond @(KcalIn > limitK ? $"dépassé de {KcalIn - limitK}" : "respecté")</span>
+                }
+                @if (Diary?.DailyBurnTarget is int goalB && goalB > 0)
+                {
+                    <span class="@(KcalBurned >= goalB ? "text-volt" : "")"> · Dépense @(KcalBurned >= goalB ? "objectif atteint" : $"reste {goalB - KcalBurned}")</span>
+                }
+            </p>
+        }
+        <div class="flex items-center gap-2 mt-2.5">
+            <span class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold">Poids</span>
+            <span class="font-display text-sm font-extrabold text-snow leading-none">
+                @(Diary?.WeightKg is double pw ? $"{pw:0.#} kg" : "à renseigner")
+                <span class="text-[10px] text-[#79838c] font-normal">✎</span>
+            </span>
+        </div>
         <div class="flex gap-1 mt-3">
             @for (var seg = 0; seg < DiaryService.MealSlots.Length; seg++)
             {
@@ -50,48 +85,62 @@
         </div>
     </div>
 
-    <!-- Frise compacte : jalons remplis/fantômes + activités -->
-    <div class="relative pl-[60px] mt-5">
+    <!-- Frise : mêmes cartes qu'en vrai (EventCard en lecture), jalons et coutures -->
+    <div class="relative pl-[60px] mt-4">
         <div class="absolute left-[50px] top-2 bottom-2 w-[2px] bg-[#cbd3da]"></div>
-        <div class="space-y-4">
-            @foreach (var row in Rows())
+        @{ var rows = FriseRows().ToList(); }
+        <div>
+            @for (var ri = 0; ri <= rows.Count; ri++)
             {
-                <div class="relative">
-                    <span class="absolute -left-[60px] top-[10px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#9aa4ad]">@row.Time.ToString(@"HH\:mm")</span>
-                    <span class="absolute -left-[13px] top-[13px] w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] @(row.IsActivity ? "bg-carbon" : row.Filled ? "bg-volt" : "bg-[#aeb8c0]")"></span>
-                    @if (row.IsActivity)
+                <div class="relative h-7">
+                    <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-[#d3dae0]"></div>
+                    <span class="absolute -left-[13px] top-1/2 -mt-1 w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] border-[1.5px] bg-canvas border-[#aeb8c0]"></span>
+                </div>
+                @if (ri < rows.Count)
+                {
+                    var row = rows[ri];
+                    @if (row.Event == null)
                     {
-                        <div class="bg-carbon rounded-xl px-4 py-3">
-                            <p class="text-[8px] font-extrabold uppercase tracking-[.14em] text-volt">Activité</p>
-                            <p class="font-display text-[14px] font-extrabold text-snow leading-tight">@row.Title</p>
-                            @if (!string.IsNullOrEmpty(row.Detail))
-                            {
-                                <p class="text-[11px] text-[#9aa4ad] mt-0.5">@row.Detail</p>
-                            }
-                        </div>
-                    }
-                    else if (row.Filled)
-                    {
-                        <div class="bg-white rounded-xl px-4 py-3 shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)]">
-                            <p class="font-display text-[14px] font-extrabold text-carbon leading-tight">@row.Title</p>
-                            @if (!string.IsNullOrEmpty(row.Detail))
-                            {
-                                <p class="text-[12px] text-gray-600 mt-1 leading-snug">@row.Detail</p>
-                            }
-                            @if (row.Kcal is int rk and > 0)
-                            {
-                                <span class="inline-block bg-carbon text-volt rounded-[5px] px-2 py-1 text-[8.5px] font-extrabold uppercase tracking-[.1em] mt-2">≈ @rk kcal</span>
-                            }
+                        var slot = DiaryService.MealSlots[row.EmptySlot!.Value];
+                        <div class="relative mb-1">
+                            <span class="absolute -left-[60px] top-[13px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#9aa4ad]">@slot.DefaultTime.ToString(@"HH\:mm")</span>
+                            <span class="absolute -left-[13px] top-4 w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] bg-[#aeb8c0]"></span>
+                            <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[repeating-linear-gradient(135deg,#dde3e9_0_7px,#e4e9ee_7px_14px)]">
+                                <span class="flex-1 min-w-0 font-display text-[13px] font-extrabold text-[#69737d]">@slot.Label</span>
+                                <span class="bg-volt text-carbon rounded-[5px] px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-[.1em] shadow-[0_2px_0_rgba(14,17,20,.18)]">+ Ajouter</span>
+                            </div>
                         </div>
                     }
                     else
                     {
-                        <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[repeating-linear-gradient(135deg,#dde3e9_0_7px,#e4e9ee_7px_14px)]">
-                            <span class="flex-1 font-display text-[13px] font-extrabold text-[#69737d]">@row.Title</span>
+                        var evt = row.Event;
+                        var isMeal = evt.EventType == DayEventType.Meal;
+                        var evtTime = evt.Time ?? (evt.MealSlot is int ms ? DiaryService.MealSlots[ms].DefaultTime : new TimeOnly(12, 0));
+                        <div class="relative mb-1">
+                            <span class="absolute -left-[60px] top-[9px] w-[42px] font-display text-[10.5px] font-extrabold tabular-nums text-[#2a3138]">@evtTime.ToString(@"HH\:mm")</span>
+                            <span class="absolute -left-[13px] top-4 w-2 h-2 rotate-45 shadow-[0_0_0_3px_#e9edf1] @(isMeal ? "bg-volt" : "bg-carbon")"></span>
+                            <div class="min-w-0">
+                                <EventCard Event="evt" ConcurrentActivities="@Concurrent(evt)" />
+                            </div>
                         </div>
                     }
-                </div>
+                }
             }
+        </div>
+    </div>
+
+    <!-- Notes de la journée (lecture) -->
+    <div class="border-t border-gray-100 pt-4 mt-2">
+        <h3 class="font-display font-bold text-gray-900 mb-3 text-lg">Notes de la journée</h3>
+        <div class="space-y-2">
+            <div>
+                <p class="block text-[11px] font-medium text-gray-400 mb-1">🧘 Émotions / Stress (journée)</p>
+                <div class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm min-h-[3.5rem] @(string.IsNullOrEmpty(Log?.Emotions) ? "text-gray-400" : "text-gray-800")">@(Log?.Emotions ?? "Comment vous sentez-vous globalement aujourd'hui ?")</div>
+            </div>
+            <div>
+                <p class="block text-[11px] font-medium text-gray-400 mb-1">📝 Notes générales</p>
+                <div class="w-full bg-slate-50 rounded-lg px-3 py-2 text-sm min-h-[3.5rem] @(string.IsNullOrEmpty(Log?.GeneralNotes) ? "text-gray-400" : "text-gray-800")">@(Log?.GeneralNotes ?? "Observations, remarques…")</div>
+            </div>
         </div>
     </div>
 </div>
@@ -100,10 +149,9 @@
     [Parameter, EditorRequired] public DateOnly Date { get; set; }
     [Parameter] public DailyLog? Log { get; set; }
     [Parameter] public FoodDiary? Diary { get; set; }
+    [Parameter] public bool IsToday { get; set; }
 
     static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
-
-    record GlanceRow(TimeOnly Time, string Title, string? Detail, bool Filled, bool IsActivity, int? Kcal);
 
     int FilledMeals => Log?.Events.Count(e => e.EventType == DayEventType.Meal
         && (e.FoodEntries.Count > 0 || e.Photos.Count > 0 || e.DrinkEntries.Count > 0)) ?? 0;
@@ -116,18 +164,14 @@
     int HydrationMl => Log == null ? 0
         : DiaryService.EstimateHydrationMl(Log.Events.SelectMany(e => e.DrinkEntries));
 
-    // Même règle que la vue réelle : ingérées − sport − métabolisme de base.
-    int? Balance
-    {
-        get
-        {
-            if (KcalIn == 0 && KcalBurned == 0) return null;
-            var bmr = Diary == null ? null : DiaryService.BasalMetabolicRate(Diary, Date.Year);
-            return (int)Math.Round(KcalIn - KcalBurned - (bmr ?? 0));
-        }
-    }
-
     int ActivityMin => Log?.Events.Where(e => e.EventType == DayEventType.Activity).Sum(e => e.DurationMinutes ?? 0) ?? 0;
+
+    double? Bmr => Diary == null ? null : DiaryService.BasalMetabolicRate(Diary, Date.Year);
+    double? Needs => Diary == null ? null : DiaryService.DailyEnergyNeeds(Diary, Date.Year);
+
+    // Même règle que la vue réelle : ingérées − sport − métabolisme de base.
+    int? Balance => KcalIn == 0 && KcalBurned == 0 ? null
+        : (int)Math.Round(KcalIn - KcalBurned - (Bmr ?? 0));
 
     static string FormatMin(int m) => m >= 60 ? $"{m / 60}h{m % 60:00}" : $"{m} min";
 
@@ -135,35 +179,28 @@
         ? string.Format(Fr, "≈ {0:0.#} L", ml / 1000.0)
         : $"≈ {ml} ml";
 
-    IEnumerable<GlanceRow> Rows()
+    // Miroir de DiaryView.GetFriseRows : jalons de repas (remplis ou fantômes)
+    // et activités autonomes, ordonnés par heure.
+    record FriseRow(DayEvent? Event, int? EmptySlot);
+
+    IEnumerable<FriseRow> FriseRows()
     {
-        var events = Log?.Events ?? [];
-        var rows = new List<GlanceRow>();
+        var rows = new List<(TimeOnly SortTime, FriseRow Row)>();
         for (var i = 0; i < DiaryService.MealSlots.Length; i++)
         {
             var slot = DiaryService.MealSlots[i];
-            var meal = events.FirstOrDefault(e => e.MealSlot == i);
-            var foods = meal == null ? "" : string.Join(" · ", meal.FoodEntries
-                .OrderBy(f => f.SortOrder).Select(f => f.FoodName).Take(5));
-            var kcal = meal == null ? (int?)null
-                : (int)Math.Round(meal.FoodEntries.Sum(f => DiaryService.EstimateKcal(f) ?? 0));
-            rows.Add(new GlanceRow(
-                meal?.Time ?? slot.DefaultTime,
-                string.IsNullOrWhiteSpace(meal?.Label) ? slot.Label : meal!.Label,
-                foods,
-                meal != null && (meal.FoodEntries.Count > 0 || meal.Photos.Count > 0 || meal.DrinkEntries.Count > 0),
-                false,
-                kcal));
+            var meal = Log?.Events.FirstOrDefault(e => e.MealSlot == i);
+            rows.Add((meal?.Time ?? slot.DefaultTime, new FriseRow(meal, meal == null ? i : null)));
         }
-        foreach (var act in events.Where(e => e.EventType == DayEventType.Activity))
+        foreach (var act in (Log?.Events ?? [])
+            .Where(e => e.EventType == DayEventType.Activity && !e.ConcurrentWithMealSlot.HasValue))
         {
-            var parts = new List<string>();
-            if (act.DurationMinutes is int dm and > 0) parts.Add($"{dm} min");
-            if (!string.IsNullOrEmpty(act.Intensity)) parts.Add(act.Intensity);
-            if (act.CaloriesBurned is int cb and > 0) parts.Add($"−{cb} kcal");
-            if (act.DistanceKm is double km and > 0) parts.Add(string.Format(Fr, "{0:0.#} km", km));
-            rows.Add(new GlanceRow(act.Time ?? new TimeOnly(12, 0), act.Label, string.Join(" · ", parts), true, true, null));
+            rows.Add((act.Time ?? TimeOnly.MinValue, new FriseRow(act, null)));
         }
-        return rows.OrderBy(r => r.Time);
+        return rows.OrderBy(r => r.SortTime).Select(r => r.Row);
     }
+
+    IReadOnlyList<DayEvent> Concurrent(DayEvent meal) => meal.MealSlot is not int slot ? []
+        : (Log?.Events ?? []).Where(e => e.EventType == DayEventType.Activity && e.ConcurrentWithMealSlot == slot)
+            .OrderBy(e => e.Time).ThenBy(e => e.CreatedAt).ToList();
 }
