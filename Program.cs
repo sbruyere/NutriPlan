@@ -144,7 +144,8 @@ using (var scope = app.Services.CreateScope())
             "DefaultUnit" TEXT NOT NULL,
             "Units" TEXT NOT NULL,
             "UnitWeightG" REAL NULL,
-            "TypicalQty" REAL NULL);
+            "TypicalQty" REAL NULL,
+            "Source" TEXT NOT NULL DEFAULT 'ciqual');
         """);
     ctx.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_CatalogFoods_SearchName\" ON \"CatalogFoods\" (\"SearchName\");");
     // Macronutriments ajoutés après la première version du référentiel.
@@ -153,10 +154,14 @@ using (var scope = app.Services.CreateScope())
         try { ctx.Database.ExecuteSqlRaw($"ALTER TABLE CatalogFoods ADD COLUMN {macroCol} REAL;"); }
         catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
     }
+    // Référentiel d'origine (ciqual | usda), ajouté avec le complément USDA.
+    try { ctx.Database.ExecuteSqlRaw("ALTER TABLE CatalogFoods ADD COLUMN Source TEXT NOT NULL DEFAULT 'ciqual';"); }
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
 
     // Seed au premier démarrage — ou re-seed si le référentiel date d'avant les
-    // macronutriments (aucune ligne n'a de protéines : impossible sur un seed à jour).
-    if (!ctx.CatalogFoods.Any(c => c.ProteinPer100g != null))
+    // macronutriments (aucune ligne avec protéines) ou d'avant le complément USDA
+    // (aucune ligne usda) : impossible sur un seed à jour.
+    if (!ctx.CatalogFoods.Any(c => c.ProteinPer100g != null) || !ctx.CatalogFoods.Any(c => c.Source == "usda"))
     {
         var seedPath = Path.Combine(app.Environment.ContentRootPath, "Data", "Seed", "food-catalog.json");
         if (File.Exists(seedPath))

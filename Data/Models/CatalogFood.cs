@@ -27,4 +27,7 @@ public class CatalogFood
     [Required, MaxLength(120)] public string Units { get; set; } = "g"; // unités pertinentes, séparées par |
     public double? UnitWeightG { get; set; }                      // poids (g) d'UNE unité par défaut non métrique
     public double? TypicalQty { get; set; }                       // portion typique adulte, exprimée dans DefaultUnit
+    // Référentiel d'origine : "ciqual" (ANSES 2025) ou "usda" (FoodData Central,
+    // complément traduit en français pour les aliments absents de Ciqual).
+    [Required, MaxLength(10)] public string Source { get; set; } = "ciqual";
 }
