@@ -49,15 +49,23 @@
                     <div class="flex items-start gap-2">
                         <span class="text-xl mt-0.5 flex-shrink-0">@slot.Icon</span>
                         <div>
+                            @{
+                                // Nom personnalisé saisi par le patient (ex. « Brunch ») sinon libellé du créneau.
+                                var mealTitle = !string.IsNullOrWhiteSpace(meal?.Label) ? meal!.Label : slot.Label;
+                            }
                             @if (isMain)
                             {
                                 <span class="text-[9px] font-bold uppercase tracking-widest text-indigo-400 leading-none">Repas</span>
-                                <p class="font-bold text-gray-800 text-sm leading-tight">@slot.Label</p>
+                                <p class="font-bold text-gray-800 text-sm leading-tight">@mealTitle</p>
                             }
                             else
                             {
                                 <span class="text-[9px] font-bold uppercase tracking-widest text-orange-400 leading-none">Collation</span>
-                                <p class="font-semibold text-gray-600 text-xs leading-tight">@slot.Label</p>
+                                <p class="font-semibold text-gray-600 text-xs leading-tight">@mealTitle</p>
+                            }
+                            @if (mealTitle != slot.Label)
+                            {
+                                <p class="text-[9px] text-gray-400 leading-none mt-0.5">(@slot.Label)</p>
                             }
                             <p class="text-xs text-gray-400 font-mono mt-0.5">@(meal?.Time?.ToString("HH:mm") ?? slot.DefaultTime.ToString("HH:mm"))</p>
                         </div>
@@ -142,6 +150,10 @@
                                         @if (!string.IsNullOrEmpty(a.Intensity)) { <span> · @a.Intensity</span> }
                                     </p>
                                 }
+                                @if (ActivityMetrics(a) is { Length: > 0 } cm)
+                                {
+                                    <p class="text-[10px] text-emerald-600 mt-0.5 font-medium">@cm</p>
+                                }
                             </div>
                         </div>
                     </td>
@@ -157,7 +169,7 @@
                         @if (!string.IsNullOrEmpty(a.ActivityNotes)) { <p class="text-xs text-gray-500 leading-snug italic">@a.ActivityNotes</p> }
                         else { <span class="text-gray-300" aria-hidden="true">—</span> }
                     </td>
-                    <td class="px-3 py-2 align-top text-gray-300"><span aria-hidden="true">—</span></td>
+                    <td class="px-3 py-2 align-top">@ActivityPhotos(a)</td>
                 </tr>
             }
 
@@ -172,6 +184,10 @@
                                 <span class="text-[9px] font-bold uppercase tracking-widest text-emerald-500 leading-none">Sport</span>
                                 <p class="font-semibold text-emerald-900 text-sm leading-tight">@a.Label</p>
                                 @if (a.Time.HasValue) { <p class="text-emerald-500 font-mono text-xs mt-0.5">@a.Time.Value.ToString("HH:mm")</p> }
+                                @if (ActivityMetrics(a) is { Length: > 0 } m)
+                                {
+                                    <p class="text-[10px] text-emerald-600 mt-0.5 font-medium">@m</p>
+                                }
                             </div>
                         </div>
                     </td>
@@ -196,7 +212,7 @@
                         @if (!string.IsNullOrEmpty(a.ActivityNotes)) { <p class="text-xs text-gray-600 leading-snug">@a.ActivityNotes</p> }
                         else { <span class="text-gray-300" aria-hidden="true">—</span> }
                     </td>
-                    <td class="px-3 py-2 align-top text-gray-300"><span aria-hidden="true">—</span></td>
+                    <td class="px-3 py-2 align-top">@ActivityPhotos(a)</td>
                 </tr>
             }
         }
@@ -330,8 +346,9 @@
     RenderFragment FoodList(ICollection<FoodEntry> entries) => @<div>
         @{
             var ungrouped = entries.Where(f => string.IsNullOrEmpty(f.GroupName)).OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt);
+            @* Groupes et aliments dans l'ordre choisi par le patient (SortOrder), pas alphabétique. *@
             var groups = entries.Where(f => !string.IsNullOrEmpty(f.GroupName))
-                .GroupBy(f => f.GroupName!).OrderBy(g => g.Key);
+                .GroupBy(f => f.GroupName!).OrderBy(g => g.Min(f => f.SortOrder));
         }
         @if (!entries.Any())
         { <span class="text-gray-300 text-xs" aria-hidden="true">—</span> }
@@ -354,7 +371,7 @@
                 <div class="mt-1">
                     <p class="text-xs font-semibold text-gray-500">🍽 @grp.Key</p>
                     <ul class="ml-3 space-y-0.5">
-                        @foreach (var f in grp.OrderBy(x => x.CreatedAt))
+                        @foreach (var f in grp.OrderBy(x => x.SortOrder).ThenBy(x => x.CreatedAt))
                         {
                             var qty = FormatQty(f);
                             <li class="flex items-baseline gap-1.5 text-xs text-gray-600 leading-snug">
@@ -367,6 +384,34 @@
                 </div>
             }
         }
+    </div>;
+
+    // Métriques d'activité saisies par le patient (ou importées de Strava).
+    static string ActivityMetrics(DayEvent a)
+    {
+        var parts = new List<string>();
+        if (a.CaloriesBurned is > 0) parts.Add($"−{a.CaloriesBurned} kcal");
+        if (a.DistanceKm is > 0) parts.Add(string.Format(FrCulture, "{0:0.#} km", a.DistanceKm));
+        if (a.ElevationM is > 0) parts.Add($"D+ {a.ElevationM} m");
+        return string.Join(" · ", parts);
+    }
+
+    RenderFragment ActivityPhotos(DayEvent a) => @<div>
+        @if (a.Photos.Count > 0)
+        {
+            <div class="flex flex-wrap gap-1">
+                @foreach (var ph in a.Photos)
+                {
+                    var p = ph;
+                    <button type="button" @onclick="() => lightboxUrl = p.FilePath"
+                            aria-label="Agrandir la photo — @a.Label" class="block rounded-lg">
+                        <img src="@p.FilePath" alt="Photo — @a.Label"
+                             class="w-10 h-10 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity" />
+                    </button>
+                }
+            </div>
+        }
+        else { <span class="text-gray-300 text-xs" aria-hidden="true">—</span> }
     </div>;
 
     static string FormatQty(FoodEntry f)
