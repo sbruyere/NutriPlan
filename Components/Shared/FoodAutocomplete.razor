@@ -94,6 +94,16 @@
         foreach (var m in ComposedMarkers) if (f.Contains(m)) score += 4;
         score += f.Count(ch => ch == ',');   // chaque qualificatif éloigne de l'aliment brut
         score += f.Length / 24;              // les intitulés interminables en dernier
+        // « cru » est un état de composition du référentiel, pas une assiette :
+        // pour la viande, le poisson et les fruits de mer, on saisit la version
+        // cuite — les variantes crues restent proposées, mais après.
+        if (f.Contains(" cru"))   // « , cru » mais aussi « côte crue », « viande crue »…
+        {
+            var sg = Fold(c.SubGroupName ?? "");
+            if (sg.Contains("viande") || sg.Contains("poisson") || sg.Contains("mollusque")
+                || sg.Contains("crustace") || sg.Contains("charcuterie") || sg.Contains("oeufs"))
+                score += 4;
+        }
         return score;
     }
 
