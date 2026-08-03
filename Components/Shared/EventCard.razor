@@ -180,17 +180,18 @@ else
 
     @if (Event.EventType == DayEventType.Meal)
     {
-        <!-- ── DÉBUT du jalon : Faim (slider) + Émotions ───────────────── -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
+        <!-- ── Ressentis sur UNE ligne : Faim avant → Rassasié après,
+             plus les chips Émotions / Digestion (gamme neutre, carbon quand rempli) ── -->
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-1.5">
 
-            <div class="flex items-center gap-2 flex-1 min-w-[200px]">
-                <span class="text-xs font-semibold text-amber-800 flex-shrink-0">🤤 Faim</span>
+            <div class="flex items-center gap-1.5 flex-1 min-w-[150px]">
+                <span class="text-[11px] font-bold text-gray-500 flex-shrink-0">Faim</span>
                 <input type="range" min="0" max="10" step="1"
                        value="@(hungerBefore ?? 0)"
                        @oninput="PreviewHunger" @onchange="CommitHunger"
                        aria-label="Faim avant le repas, de 0 à 10"
-                       class="flex-1 min-w-[90px] accent-carbon cursor-pointer" />
-                <span class="inline-flex items-center justify-center min-w-11 px-1.5 py-0.5 rounded-md text-xs font-bold tabular-nums
+                       class="flex-1 min-w-[60px] accent-carbon cursor-pointer" />
+                <span class="inline-flex items-center justify-center min-w-10 px-1 py-0.5 rounded-md text-[11px] font-bold tabular-nums
                              @(hungerBefore.HasValue ? ScorePillClass(hungerBefore.Value) : "bg-gray-100 text-gray-400")">
                     @(hungerBefore.HasValue ? $"{hungerBefore}/10" : "—")
                 </span>
@@ -201,29 +202,73 @@ else
                 }
             </div>
 
-            <div class="relative">
-                <button @onclick="() => TogglePanel(PanelEmotions)" aria-haspopup="true" aria-expanded="@(openPanel == PanelEmotions ? "true" : "false")"
-                        aria-label="Noter les émotions liées au repas"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors @(string.IsNullOrEmpty(emotions) ? "bg-purple-50 text-purple-600 hover:bg-purple-100" : "bg-purple-100 text-purple-800")">
-                    💭 Émotions
-                    <span class="@(string.IsNullOrEmpty(emotions) ? "font-normal text-purple-400" : "")">@EmotionSummary</span>
-                </button>
-                @if (openPanel == PanelEmotions)
+            <div class="flex items-center gap-1.5 flex-1 min-w-[150px]">
+                <span class="text-[11px] font-bold text-gray-500 flex-shrink-0">Rassasié</span>
+                <input type="range" min="0" max="10" step="1"
+                       value="@(satietyAfter ?? 0)"
+                       @oninput="PreviewSatiety" @onchange="CommitSatiety"
+                       aria-label="Rassasiement après le repas, de 0 à 10"
+                       class="flex-1 min-w-[60px] accent-carbon cursor-pointer" />
+                <span class="inline-flex items-center justify-center min-w-10 px-1 py-0.5 rounded-md text-[11px] font-bold tabular-nums
+                             @(satietyAfter.HasValue ? ScorePillClass(satietyAfter.Value) : "bg-gray-100 text-gray-400")">
+                    @(satietyAfter.HasValue ? $"{satietyAfter}/10" : "—")
+                </span>
+                @if (satietyAfter.HasValue)
                 {
-                    <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
-                    <div class="absolute right-0 top-full mt-0.5 z-30">
-                        <div class="bg-white rounded-xl shadow-lg p-2" style="width:min(270px, calc(100vw - 4rem))">
-                            <div class="flex flex-wrap gap-1.5">
-                                @foreach (var chip in EmotionChips) { var c = chip;
-                                    <button @onclick="() => ToggleEmotionChip(c)"
-                                            class="px-2 py-1.5 rounded-lg text-xs border transition-colors @(EmotionSelected(c) ? "bg-purple-100 border-purple-300 text-purple-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-purple-50 hover:text-purple-600")">
-                                        @(EmotionSelected(c) ? "✓ " : "")@c
-                                    </button>
-                                }
+                    <button @onclick="() => SetSatiety(null)" aria-label="Effacer la note de rassasiement"
+                            class="text-gray-400 hover:text-gray-600 text-base leading-none p-1 -m-1 flex-shrink-0">×</button>
+                }
+            </div>
+
+            <div class="flex items-center gap-1.5">
+                <div class="relative">
+                    <button @onclick="() => TogglePanel(PanelEmotions)" aria-haspopup="true" aria-expanded="@(openPanel == PanelEmotions ? "true" : "false")"
+                            aria-label="Noter les émotions liées au repas"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold transition-colors @(string.IsNullOrEmpty(emotions) ? "bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee]" : "bg-carbon text-snow")">
+                        💭 Émotions
+                        <span class="@(string.IsNullOrEmpty(emotions) ? "font-normal text-gray-400" : "text-[#c9d2d9]")">@EmotionSummary</span>
+                    </button>
+                    @if (openPanel == PanelEmotions)
+                    {
+                        <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                        <div class="absolute right-0 top-full mt-0.5 z-30">
+                            <div class="bg-white rounded-xl shadow-lg p-2" style="width:min(270px, calc(100vw - 4rem))">
+                                <div class="flex flex-wrap gap-1.5">
+                                    @foreach (var chip in EmotionChips) { var c = chip;
+                                        <button @onclick="() => ToggleEmotionChip(c)"
+                                                class="px-2 py-1.5 rounded-lg text-xs border transition-colors @(EmotionSelected(c) ? "bg-carbon border-carbon text-snow font-medium" : "border-gray-100 text-gray-500 hover:bg-[#eff3f6]")">
+                                            @(EmotionSelected(c) ? "✓ " : "")@c
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         </div>
-                    </div>
-                }
+                    }
+                </div>
+                <div class="relative">
+                    <button @onclick="() => TogglePanel(PanelSensations)" aria-haspopup="true" aria-expanded="@(openPanel == PanelSensations ? "true" : "false")"
+                            aria-label="Noter la digestion après le repas"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold transition-colors @(string.IsNullOrEmpty(sensations) ? "bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee]" : "bg-carbon text-snow")">
+                        🫁 Digestion
+                        <span class="@(string.IsNullOrEmpty(sensations) ? "font-normal text-gray-400" : "text-[#c9d2d9]")">@SensationSummary</span>
+                    </button>
+                    @if (openPanel == PanelSensations)
+                    {
+                        <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                        <div class="absolute right-0 top-full mt-0.5 z-30">
+                            <div class="bg-white rounded-xl shadow-lg p-2" style="width:min(270px, calc(100vw - 4rem))">
+                                <div class="flex flex-wrap gap-1.5">
+                                    @foreach (var chip in PhysicalSensationChips) { var c = chip;
+                                        <button @onclick="() => ToggleSensationChip(c)"
+                                                class="px-2 py-1.5 rounded-lg text-xs border transition-colors @(SensationSelected(c) ? "bg-carbon border-carbon text-snow font-medium" : "border-gray-100 text-gray-500 hover:bg-[#eff3f6]")">
+                                            @(SensationSelected(c) ? "✓ " : "")@c
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
             </div>
 
         </div>
@@ -237,7 +282,7 @@ else
         }
 
         <!-- ── Corps central : Aliments + Photos + Hydratation ────────── -->
-        <div class="py-2 space-y-3">
+        <div class="py-1.5 space-y-2">
             <div>
                 <p class="text-[11px] font-medium text-gray-400 mb-1.5">Aliments
                     @if (MealKcalTotal is double editKcal)
@@ -316,9 +361,9 @@ else
                 @foreach (var grp in GroupedFoods)
                 {
                     var gName = grp.Key;
-                    <div class="border border-amber-100 rounded-lg overflow-hidden mb-1.5">
-                        <div class="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50/60 border-b border-amber-100">
-                            <span class="text-[11px] font-semibold text-amber-800 flex-1">🍽 @gName</span>
+                    <div class="border border-[#e2e8ee] rounded-lg overflow-hidden mb-1.5">
+                        <div class="flex items-center gap-2 px-2.5 py-1 bg-[#f7f9fb] border-b border-[#e8edf2]">
+                            <span class="font-display text-[11px] font-extrabold text-[#4a545e] flex-1">@gName</span>
                             <button @onclick="() => DeleteGroup(gName)" aria-label="Supprimer la composition @gName"
                                     class="text-gray-400 hover:text-red-500 text-[10px] transition-colors px-1.5 py-1 -my-1">× Supprimer</button>
                         </div>
@@ -330,27 +375,27 @@ else
                                 var f = food;
                                 @if (editingFoodId == f.Id)
                                 {
-                                    <div class="border border-amber-200 rounded-lg p-1.5 bg-amber-50/20 my-1">
+                                    <div class="border border-primary-200 rounded-lg p-1.5 bg-primary-50/20 my-1">
                                         <div class="flex gap-1.5 items-center">
                                             <input @bind="editFoodName" @bind:event="oninput" @onkeyup="OnEditFoodKeyUp"
                                                    type="text" placeholder="Nom…"
-                                                   class="flex-1 min-w-0 bg-white rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 placeholder-gray-400" />
+                                                   class="flex-1 min-w-0 bg-white rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
                                             <input @bind="editFoodQtyVal" @bind:event="oninput"
                                                    type="number" min="0" step="any" placeholder="Qté"
-                                                   class="w-14 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-amber-200 text-center placeholder-gray-400" />
+                                                   class="w-14 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
                                             <select @bind="editFoodUnit"
-                                                    class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-amber-200 max-w-[68px]">
+                                                    class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[68px]">
                                                 @UnitOptions
                                             </select>
                                             <button @onclick="SaveFoodEdit" aria-label="Enregistrer la modification"
-                                                    class="text-amber-600 hover:text-amber-800 font-bold text-sm px-1.5 py-1 flex-shrink-0">✓</button>
+                                                    class="text-primary-600 hover:text-primary-800 font-bold text-sm px-1.5 py-1 flex-shrink-0">✓</button>
                                             <button @onclick="CancelFoodEdit" aria-label="Annuler la modification"
                                                     class="text-gray-400 hover:text-gray-600 text-lg leading-none px-1.5 py-1 flex-shrink-0">×</button>
                                         </div>
                                         <div class="flex items-center gap-1.5 mt-1">
                                             <span class="text-[11px] text-gray-400 flex-shrink-0">Composition</span>
                                             <select @bind="editFoodGroup" aria-label="Déplacer vers une composition"
-                                                    class="flex-1 min-w-0 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-amber-200">
+                                                    class="flex-1 min-w-0 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200">
                                                 <option value="">Aucune</option>
                                                 @foreach (var grpOption in EditGroupOptions()) { <option value="@grpOption">@grpOption</option> }
                                             </select>
@@ -367,7 +412,7 @@ else
                                          @ondrop="async () => await DropFoodOnFood(f.Id)"
                                          @ondrop:stopPropagation="true"
                                          class="flex items-center gap-2 py-1 pl-1 cursor-grab">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-amber-200 flex-shrink-0"></span>
+                                        <span class="w-1.5 h-1.5 rotate-45 bg-[#c3ccd4] flex-shrink-0"></span>
                                         <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
                                         @{ var qty = FormatQty(f); var kcalGrouped = KcalOf(f); }
                                         @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@qty</span> }
@@ -417,7 +462,7 @@ else
                         {
                             <div class="px-2.5 py-1">
                                 <button @onclick="() => StartAddFoodToCompo(gName)"
-                                        class="inline-flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-700 transition-colors">
+                                        class="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-carbon transition-colors">
                                     <Icon Name="plus" Class="w-2.5 h-2.5" /> Aliment
                                 </button>
                             </div>
@@ -428,9 +473,9 @@ else
                 <!-- Composition en attente (nommée, pas encore de food) -->
                 @if (pendingCompoName != null)
                 {
-                    <div class="border border-amber-200 rounded-lg overflow-hidden mb-1.5 bg-amber-50/30">
-                        <div class="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50 border-b border-amber-100">
-                            <span class="text-[11px] font-semibold text-amber-800 flex-1">🍽 @pendingCompoName</span>
+                    <div class="border border-[#dde3e9] rounded-lg overflow-hidden mb-1.5 bg-[#fbfcfd]">
+                        <div class="flex items-center gap-2 px-2.5 py-1 bg-[#f7f9fb] border-b border-[#e8edf2]">
+                            <span class="font-display text-[11px] font-extrabold text-[#4a545e] flex-1">@pendingCompoName</span>
                             <button @onclick="CancelAddCompo" class="text-gray-400 hover:text-red-500 text-[10px] transition-colors px-1.5 py-1 -my-1">× Annuler</button>
                         </div>
                         <div class="px-2 py-2">
@@ -497,25 +542,24 @@ else
 
                     @if (showAddCompoForm)
                     {
-                        <div class="mt-1.5 p-2 bg-amber-50/50 rounded-lg">
-                            <p class="text-[10px] font-medium text-amber-700 mb-1">Nom de la préparation</p>
+                        <div class="mt-1.5 p-2 bg-slate-50 rounded-lg">
                             <div class="flex gap-1.5 items-center">
-                                <input @bind="newCompoName" @bind:event="oninput" @onkeyup="OnCompoKeyUp" type="text" placeholder="ex : Sandwich au thon, Salade composée…"
-                                       class="flex-1 min-w-0 bg-white rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 placeholder-gray-400" />
+                                <input @bind="newCompoName" @bind:event="oninput" @onkeyup="OnCompoKeyUp" type="text" placeholder="Nom de la préparation — ex : Sandwich au thon…"
+                                       class="flex-1 min-w-0 bg-white rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
                                 <button @onclick="CreateComposition" disabled="@string.IsNullOrWhiteSpace(newCompoName)" aria-label="Créer la préparation"
-                                        class="bg-amber-500 hover:bg-amber-600 disabled:opacity-30 text-snow px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">→</button>
+                                        class="bg-volt hover:bg-volt-dark disabled:opacity-30 text-carbon px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">→</button>
                             </div>
                             @if (QuickCompositions.Count > 0)
                             {
                                 <!-- Préparations mémorisées (les plus utilisées) : re-proposées en un tap avec tous leurs aliments -->
-                                <p class="text-[9px] font-extrabold uppercase tracking-[.12em] text-amber-600/90 mt-2 mb-1">Vos préparations habituelles</p>
-                                <div class="flex flex-wrap gap-1">
+                                <p class="text-[9px] font-extrabold uppercase tracking-[.12em] text-gray-400 mt-2 mb-1">Vos préparations habituelles</p>
+                                <div class="flex gap-1 overflow-x-auto pb-0.5">
                                     @foreach (var qc in QuickCompositions) { var c = qc;
                                         <button type="button" @onclick="async () => await AddQuickComposition(c)"
                                                 title="@($"Ajouter {c.Name} — {string.Join(", ", c.Items.Select(i => i.FoodName))} (utilisée {c.UseCount}×)")"
-                                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[11px] font-medium hover:bg-amber-200 transition-colors">
-                                            🍽 @c.Name
-                                            <span class="font-normal text-amber-500">@c.Items.Count aliment@(c.Items.Count > 1 ? "s" : "")</span>
+                                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#eff3f6] text-[#4a545e] text-[11px] font-semibold hover:bg-[#e4e9ee] transition-colors whitespace-nowrap flex-shrink-0">
+                                            @c.Name
+                                            <span class="font-normal text-gray-400">@c.Items.Count aliment@(c.Items.Count > 1 ? "s" : "")</span>
                                         </button>
                                     }
                                 </div>
@@ -527,132 +571,74 @@ else
                 @PhotosEditor
             </div>
 
-            <!-- Hydratation -->
-            <div class="pt-1 border-t border-slate-50">
-                <div class="flex items-center gap-2 mb-1">
-                    <p class="text-[11px] font-medium text-gray-400 flex items-center gap-1"><Icon Name="droplet" Class="w-3 h-3" /> Hydratation</p>
-                    <div class="relative">
-                        <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
-                                aria-label="Ajouter une boisson"
-                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                            + Ajouter <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
-                        </button>
-                        @if (openPanel == PanelDrinks)
-                        {
-                            <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
-                            <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(320px, calc(100vw - 4rem))">
-                                <div class="space-y-2 mb-2 max-h-72 overflow-y-auto pr-1">
-                                    @foreach (var grp in QuickDrinkGroups) { var g = grp;
-                                        <div>
-                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">@g.Group</p>
-                                            <div class="flex flex-wrap gap-1">
-                                                @foreach (var preset in g.Drinks) { var p = preset;
-                                                    <button @onclick="() => AddDrink(p)"
-                                                            class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap @DrinkChipClass(g.Group)">@p</button>
-                                                }
-                                            </div>
+            <!-- ── Barre d'outils : boisson + activité, puis les boissons saisies ── -->
+            <div class="pt-1.5 border-t border-slate-50 flex flex-wrap items-center gap-1.5">
+                <div class="relative">
+                    <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
+                            aria-label="Ajouter une boisson"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee] transition-colors">
+                        💧 Boisson <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
+                    </button>
+                    @if (openPanel == PanelDrinks)
+                    {
+                        <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                        <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(320px, calc(100vw - 4rem))">
+                            <div class="space-y-2 mb-2 max-h-72 overflow-y-auto pr-1">
+                                @foreach (var grp in QuickDrinkGroups) { var g = grp;
+                                    <div>
+                                        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">@g.Group</p>
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach (var preset in g.Drinks) { var p = preset;
+                                                <button @onclick="() => AddDrink(p)"
+                                                        class="px-2.5 py-1 rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap bg-[#eff3f6] text-[#5b6570] hover:bg-carbon hover:text-snow">@p</button>
+                                            }
                                         </div>
-                                    }
-                                </div>
-                                <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
-                                    <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
-                                           class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 border-0" />
-                                    <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
-                                            class="px-2 py-1 rounded-lg text-[11px] bg-blue-500 hover:bg-blue-600 text-snow disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
-                                </div>
+                                    </div>
+                                }
                             </div>
-                        }
-                    </div>
+                            <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
+                                <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
+                                       class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-300 border-0" />
+                                <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
+                                        class="px-2 py-1 rounded-lg text-[11px] font-bold bg-volt hover:bg-volt-dark text-carbon disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
+                            </div>
+                        </div>
+                    }
                 </div>
-                @if (drinks.Count > 0)
+                @if (Event.MealSlot.HasValue)
                 {
-                    <div class="flex flex-wrap gap-1">
-                        @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
-                            <span class="inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 text-[11px] pl-1 pr-2 py-0.5 rounded-full">
-                                <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">‹</button>
-                                <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">›</button>
-                                @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
-                            </span>
-                        }
-                    </div>
+                    <button @onclick="AddConcurrentActivity"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee] transition-colors">
+                        🏃 Activité pendant le repas
+                    </button>
+                }
+                @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
+                    <span class="inline-flex items-center gap-0.5 bg-[#eff3f6] text-[#5b6570] text-[11px] pl-1 pr-2 py-0.5 rounded-[6px]">
+                        <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">‹</button>
+                        <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">›</button>
+                        💧 @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
+                    </span>
                 }
             </div>
 
-            <!-- Activités pendant ce repas -->
-            @if (Event.MealSlot.HasValue)
+            <!-- Activités pendant ce repas (uniquement s'il y en a) -->
+            @if (Event.MealSlot.HasValue && ConcurrentActivities.Count > 0)
             {
-                <div class="pt-1 border-t border-slate-50">
-                    <p class="text-[11px] font-medium text-gray-400 mb-1.5">Activités pendant ce repas</p>
-                    @if (ConcurrentActivities.Count > 0)
-                    {
-                        <div class="space-y-1.5 mb-1.5">
-                            @foreach (var act in ConcurrentActivities) { var a = act;
-                                <div @key="a.Id">
-                                    <EventCard Event="a" ConcurrentActivities="@EmptyActivities" QuickFoods="@QuickFoods" OnChanged="OnChanged" OnDelete="DeleteConcurrent" />
-                                </div>
-                            }
+                <div class="space-y-1.5">
+                    @foreach (var act in ConcurrentActivities) { var a = act;
+                        <div @key="a.Id">
+                            <EventCard Event="a" ConcurrentActivities="@EmptyActivities" QuickFoods="@QuickFoods" OnChanged="OnChanged" OnDelete="DeleteConcurrent" />
                         </div>
                     }
-                    <button @onclick="AddConcurrentActivity"
-                            class="w-full text-emerald-600 hover:bg-emerald-50 rounded-xl py-1.5 text-xs font-semibold transition-colors">
-                        + Activité simultanée
-                    </button>
                 </div>
             }
         </div>
 
-        <!-- ── FIN du jalon : Rassasiement (slider) + Digestion ────────── -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
-
-            <div class="flex items-center gap-2 flex-1 min-w-[200px]">
-                <span class="text-xs font-semibold text-emerald-800 flex-shrink-0">😌 Rassasiement</span>
-                <input type="range" min="0" max="10" step="1"
-                       value="@(satietyAfter ?? 0)"
-                       @oninput="PreviewSatiety" @onchange="CommitSatiety"
-                       aria-label="Rassasiement après le repas, de 0 à 10"
-                       class="flex-1 min-w-[90px] accent-carbon cursor-pointer" />
-                <span class="inline-flex items-center justify-center min-w-11 px-1.5 py-0.5 rounded-md text-xs font-bold tabular-nums
-                             @(satietyAfter.HasValue ? ScorePillClass(satietyAfter.Value) : "bg-gray-100 text-gray-400")">
-                    @(satietyAfter.HasValue ? $"{satietyAfter}/10" : "—")
-                </span>
-                @if (satietyAfter.HasValue)
-                {
-                    <button @onclick="() => SetSatiety(null)" aria-label="Effacer la note de rassasiement"
-                            class="text-gray-400 hover:text-gray-600 text-base leading-none p-1 -m-1 flex-shrink-0">×</button>
-                }
-            </div>
-
-            <div class="relative">
-                <button @onclick="() => TogglePanel(PanelSensations)" aria-haspopup="true" aria-expanded="@(openPanel == PanelSensations ? "true" : "false")"
-                        aria-label="Noter la digestion après le repas"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors @(string.IsNullOrEmpty(sensations) ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "bg-amber-100 text-amber-900")">
-                    🫁 Digestion
-                    <span class="@(string.IsNullOrEmpty(sensations) ? "font-normal text-amber-500" : "")">@SensationSummary</span>
-                </button>
-                @if (openPanel == PanelSensations)
-                {
-                    <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
-                    <div class="absolute right-0 bottom-full mb-0.5 z-30">
-                        <div class="bg-white rounded-xl shadow-lg p-2" style="width:min(270px, calc(100vw - 4rem))">
-                            <div class="flex flex-wrap gap-1.5">
-                                @foreach (var chip in PhysicalSensationChips) { var c = chip;
-                                    <button @onclick="() => ToggleSensationChip(c)"
-                                            class="px-2 py-1.5 rounded-lg text-xs border transition-colors @(SensationSelected(c) ? "bg-amber-100 border-amber-300 text-amber-700 font-medium" : "border-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600")">
-                                        @(SensationSelected(c) ? "✓ " : "")@c
-                                    </button>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                }
-            </div>
-
-        </div>
     }
     else
     {
         <!-- ── Carte activité sportive ─────────────────────────────────── -->
-        <div class="py-2 space-y-3">
+        <div class="py-1.5 space-y-2">
 
             <div class="flex items-center gap-2">
                 <p class="text-[11px] font-medium text-gray-400 flex items-center gap-1"><Icon Name="dumbbell" Class="w-3 h-3" /> Type de sport</p>
@@ -726,53 +712,45 @@ else
 
             @PhotosEditor
 
-            <div class="pt-1 border-t border-slate-50">
-                <div class="flex items-center gap-2 mb-1">
-                    <p class="text-[11px] font-medium text-gray-400 flex items-center gap-1"><Icon Name="droplet" Class="w-3 h-3" /> Hydratation</p>
-                    <div class="relative">
-                        <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
-                                aria-label="Ajouter une boisson"
-                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                            + Ajouter <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
-                        </button>
-                        @if (openPanel == PanelDrinks)
-                        {
-                            <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
-                            <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(320px, calc(100vw - 4rem))">
-                                <div class="space-y-2 mb-2 max-h-72 overflow-y-auto pr-1">
-                                    @foreach (var grp in QuickDrinkGroups) { var g = grp;
-                                        <div>
-                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">@g.Group</p>
-                                            <div class="flex flex-wrap gap-1">
-                                                @foreach (var preset in g.Drinks) { var p = preset;
-                                                    <button @onclick="() => AddDrink(p)"
-                                                            class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap @DrinkChipClass(g.Group)">@p</button>
-                                                }
-                                            </div>
+            <div class="pt-1.5 border-t border-slate-50 flex flex-wrap items-center gap-1.5">
+                <div class="relative">
+                    <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
+                            aria-label="Ajouter une boisson"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee] transition-colors">
+                        💧 Boisson <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
+                    </button>
+                    @if (openPanel == PanelDrinks)
+                    {
+                        <div class="fixed inset-0 z-20" @onclick="ClosePanel"></div>
+                        <div class="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl shadow-xl p-2" style="width:min(320px, calc(100vw - 4rem))">
+                            <div class="space-y-2 mb-2 max-h-72 overflow-y-auto pr-1">
+                                @foreach (var grp in QuickDrinkGroups) { var g = grp;
+                                    <div>
+                                        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">@g.Group</p>
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach (var preset in g.Drinks) { var p = preset;
+                                                <button @onclick="() => AddDrink(p)"
+                                                        class="px-2.5 py-1 rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap bg-[#eff3f6] text-[#5b6570] hover:bg-carbon hover:text-snow">@p</button>
+                                            }
                                         </div>
-                                    }
-                                </div>
-                                <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
-                                    <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
-                                           class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 border-0" />
-                                    <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
-                                            class="px-2 py-1 rounded-lg text-[11px] bg-blue-500 hover:bg-blue-600 text-snow disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
-                                </div>
+                                    </div>
+                                }
                             </div>
-                        }
-                    </div>
+                            <div class="border-t border-slate-100 pt-1.5 flex gap-1.5 items-center">
+                                <input @bind="customDrinkName" @onkeyup="OnDrinkKeyUp" type="text" placeholder="Autre boisson…"
+                                       class="flex-1 bg-slate-50 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-300 border-0" />
+                                <button @onclick="AddCustomDrink" disabled="@string.IsNullOrWhiteSpace(customDrinkName)"
+                                        class="px-2 py-1 rounded-lg text-[11px] font-bold bg-volt hover:bg-volt-dark text-carbon disabled:opacity-40 whitespace-nowrap">+ Ajouter</button>
+                            </div>
+                        </div>
+                    }
                 </div>
-                @if (drinks.Count > 0)
-                {
-                    <div class="flex flex-wrap gap-1">
-                        @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
-                            <span class="inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 text-[11px] pl-1 pr-2 py-0.5 rounded-full">
-                                <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">‹</button>
-                                <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-blue-300 hover:text-blue-700 font-bold leading-none px-1 py-1 -my-1">›</button>
-                                @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
-                            </span>
-                        }
-                    </div>
+                @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
+                    <span class="inline-flex items-center gap-0.5 bg-[#eff3f6] text-[#5b6570] text-[11px] pl-1 pr-2 py-0.5 rounded-[6px]">
+                        <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">‹</button>
+                        <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">›</button>
+                        💧 @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
+                    </span>
                 }
             </div>
 
@@ -864,19 +842,6 @@ else
         ("Alcool",            ["Bière", "Vin rouge", "Vin rosé", "Vin blanc"]),
     ];
 
-    // Teinte des chips par famille — repère visuel rapide dans le panneau
-    static string DrinkChipClass(string group) => group switch
-    {
-        "Eaux"             => "bg-sky-50 text-sky-700 hover:bg-sky-100",
-        "Cafés & chocolat" => "bg-amber-50 text-amber-800 hover:bg-amber-100",
-        "Infusions"        => "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-        "Jus & sodas"      => "bg-orange-50 text-orange-700 hover:bg-orange-100",
-        "Fermentés"        => "bg-purple-50 text-purple-700 hover:bg-purple-100",
-        "Healthy"          => "bg-teal-50 text-teal-700 hover:bg-teal-100",
-        "Alcool"           => "bg-rose-50 text-rose-700 hover:bg-rose-100",
-        _                  => "bg-blue-50 text-blue-600 hover:bg-blue-100",
-    };
-
     static readonly string[] PhysicalSensationChips =
     [
         "Aucune gêne", "Ballonnement", "Lourdeur", "Brûlures d'estomac",
@@ -890,22 +855,23 @@ else
     ];
 
     // Propositions : aliments favoris du carnet, SOUS la zone de saisie (ajout en un tap)
-    RenderFragment? QuickFoodChips => QuickFoods.Count == 0 ? null : @<div class="mt-2">
-        <p class="text-[9px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1">Suggestions</p>
-        <div class="flex flex-wrap gap-1">
+    RenderFragment? QuickFoodChips => QuickFoods.Count == 0 ? null : @<div class="mt-1.5">
+        @* Une seule ligne défilante : les habitudes restent à portée sans pousser la carte *@
+        <div class="flex items-center gap-1 overflow-x-auto pb-0.5">
+            <span class="text-[9px] font-extrabold uppercase tracking-[.12em] text-gray-400 flex-shrink-0 mr-0.5">Habitudes</span>
             @foreach (var qf in QuickFoods) { var f = qf;
                 <button type="button" @onclick="async () => await AddQuickFood(f)"
                         title="@($"Ajouter {f.FoodName} (utilisé {f.UseCount}×)")"
-                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-50 text-primary-700 text-[11px] font-medium hover:bg-primary-100 transition-colors">
+                        class="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] bg-[#eff3f6] text-[#4a545e] text-[11px] font-semibold hover:bg-[#e4e9ee] transition-colors whitespace-nowrap flex-shrink-0">
                     <Icon Name="plus" Class="w-2.5 h-2.5" /><span>@f.FoodName</span>
-                    @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="text-primary-400">@f.Quantity @f.QuantityUnit</span> }
+                    @if (!string.IsNullOrEmpty(f.Quantity)) { <span class="font-normal text-gray-400">@f.Quantity @f.QuantityUnit</span> }
                 </button>
             }
         </div>
     </div>;
 
     // Photos : vignettes réorganisables + upload + lightbox — partagé repas/activités.
-    RenderFragment PhotosEditor => @<div class="mt-2 pt-2 border-t border-slate-50">
+    RenderFragment PhotosEditor => @<div class="mt-1.5">
         @if (photos.Count > 0)
         {
             <div class="flex flex-wrap gap-1.5 mb-1.5">
@@ -936,7 +902,7 @@ else
             </div>
         }
         @if (uploadError != null) { <p role="alert" class="text-red-500 text-[11px] mb-1">@uploadError</p> }
-        <label class="inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-full text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors">
+        <label class="inline-flex items-center gap-1 cursor-pointer px-2.5 py-1 bg-[#eff3f6] hover:bg-[#e4e9ee] rounded-[6px] text-[11px] font-semibold text-[#5b6570] transition-colors">
             <Icon Name="camera" Class="w-3.5 h-3.5" /> Photo
             <InputFile OnChange="UploadPhoto" accept="image/*" multiple class="hidden" />
         </label>
