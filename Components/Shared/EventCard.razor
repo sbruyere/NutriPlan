@@ -182,10 +182,10 @@ else
     {
         <!-- ── Ressentis sur UNE ligne : Faim avant → Rassasié après,
              plus les chips Émotions / Digestion (gamme neutre, carbon quand rempli) ── -->
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-1.5">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 bg-[#f7f9fb] rounded-lg px-3 py-2 mt-1">
 
             <div class="flex items-center gap-1.5 flex-1 min-w-[150px]">
-                <span class="text-[11px] font-bold text-gray-500 flex-shrink-0">Faim</span>
+                <span class="text-[10px] font-extrabold uppercase tracking-[.1em] text-gray-400 flex-shrink-0">Faim</span>
                 <input type="range" min="0" max="10" step="1"
                        value="@(hungerBefore ?? 0)"
                        @oninput="PreviewHunger" @onchange="CommitHunger"
@@ -203,7 +203,7 @@ else
             </div>
 
             <div class="flex items-center gap-1.5 flex-1 min-w-[150px]">
-                <span class="text-[11px] font-bold text-gray-500 flex-shrink-0">Rassasié</span>
+                <span class="text-[10px] font-extrabold uppercase tracking-[.1em] text-gray-400 flex-shrink-0">Rassasié</span>
                 <input type="range" min="0" max="10" step="1"
                        value="@(satietyAfter ?? 0)"
                        @oninput="PreviewSatiety" @onchange="CommitSatiety"
@@ -224,7 +224,7 @@ else
                 <div class="relative">
                     <button @onclick="() => TogglePanel(PanelEmotions)" aria-haspopup="true" aria-expanded="@(openPanel == PanelEmotions ? "true" : "false")"
                             aria-label="Noter les émotions liées au repas"
-                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold transition-colors @(string.IsNullOrEmpty(emotions) ? "bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee]" : "bg-carbon text-snow")">
+                            class="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors @(string.IsNullOrEmpty(emotions) ? "border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb]" : "border border-carbon bg-carbon text-snow")">
                         💭 Émotions
                         <span class="@(string.IsNullOrEmpty(emotions) ? "font-normal text-gray-400" : "text-[#c9d2d9]")">@EmotionSummary</span>
                     </button>
@@ -248,7 +248,7 @@ else
                 <div class="relative">
                     <button @onclick="() => TogglePanel(PanelSensations)" aria-haspopup="true" aria-expanded="@(openPanel == PanelSensations ? "true" : "false")"
                             aria-label="Noter la digestion après le repas"
-                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold transition-colors @(string.IsNullOrEmpty(sensations) ? "bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee]" : "bg-carbon text-snow")">
+                            class="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors @(string.IsNullOrEmpty(sensations) ? "border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb]" : "border border-carbon bg-carbon text-snow")">
                         🫁 Digestion
                         <span class="@(string.IsNullOrEmpty(sensations) ? "font-normal text-gray-400" : "text-[#c9d2d9]")">@SensationSummary</span>
                     </button>
@@ -284,13 +284,18 @@ else
         <!-- ── Corps central : Aliments + Photos + Hydratation ────────── -->
         <div class="py-1.5 space-y-2">
             <div>
-                <p class="text-[11px] font-medium text-gray-400 mb-1.5">Aliments
+                <div class="flex items-baseline justify-between mb-1.5">
+                    <p class="text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400">Aliments</p>
                     @if (MealKcalTotal is double editKcal)
-                    { <span class="text-gray-500 font-semibold tabular-nums">· ≈ @((int)Math.Round(editKcal)) kcal</span> }
-                </p>
+                    { <span class="text-[11px] text-gray-500 font-bold tabular-nums">≈ @((int)Math.Round(editKcal)) kcal</span> }
+                </div>
 
-                <!-- Aliments non groupés (zone de dépôt) -->
-                <div class="space-y-1 mb-1.5"
+                @* ── Liste unique bordée : aliments libres puis compositions en sections,
+                     colonnes alignées (nom · quantité · kcal · actions) ── *@
+                @if (foods.Count > 0 || pendingCompoName != null)
+                {
+                <div class="rounded-lg border border-[#e5eaef] overflow-hidden mb-2 bg-white">
+                <div class="divide-y divide-[#f0f3f6]"
                      @ondragover:preventDefault="true"
                      @ondrop="async () => await DropFoodOnGroup(null)">
                     @foreach (var food in UngroupedFoods)
@@ -298,16 +303,16 @@ else
                         var f = food;
                         @if (editingFoodId == f.Id)
                         {
-                            <div class="border border-primary-200 rounded-lg p-1.5 bg-primary-50/20">
+                            <div class="p-2 bg-[#f7f9fb]">
                                 <div class="flex gap-1.5 items-center">
                                     <input @bind="editFoodName" @bind:event="oninput" @onkeyup="OnEditFoodKeyUp"
                                            type="text" placeholder="Nom…"
-                                           class="flex-1 min-w-0 bg-white rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                                           class="flex-1 min-w-0 bg-white border border-[#e2e8ee] rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
                                     <input @bind="editFoodQtyVal" @bind:event="oninput"
                                            type="number" min="0" step="any" placeholder="Qté"
-                                           class="w-14 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
+                                           class="w-14 bg-white border border-[#e2e8ee] rounded-md px-1.5 py-1 text-[11px] text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
                                     <select @bind="editFoodUnit"
-                                            class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[68px]">
+                                            class="bg-white border border-[#e2e8ee] rounded-md px-1 py-1 text-[11px] text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[68px]">
                                         @UnitOptions
                                     </select>
                                     <button @onclick="SaveFoodEdit" aria-label="Enregistrer la modification"
@@ -318,7 +323,7 @@ else
                                 <div class="flex items-center gap-1.5 mt-1">
                                     <span class="text-[11px] text-gray-400 flex-shrink-0">Composition</span>
                                     <select @bind="editFoodGroup" aria-label="Déplacer vers une composition"
-                                            class="flex-1 min-w-0 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200">
+                                            class="flex-1 min-w-0 bg-white border border-[#e2e8ee] rounded-md px-1.5 py-1 text-[11px] text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-200">
                                         <option value="">Aucune</option>
                                         @foreach (var grpOption in EditGroupOptions()) { <option value="@grpOption">@grpOption</option> }
                                     </select>
@@ -334,24 +339,25 @@ else
                                  @ondragover:preventDefault="true"
                                  @ondrop="async () => await DropFoodOnFood(f.Id)"
                                  @ondrop:stopPropagation="true"
-                                 class="flex items-center gap-2 py-1 px-2 rounded-lg bg-white cursor-grab transition-colors">
-                                <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
+                                 class="flex items-center gap-1 pl-3 pr-1 py-1.5 bg-white hover:bg-[#fafbfc] cursor-grab transition-colors">
+                                <span class="flex-1 min-w-0 text-[13px] font-medium text-gray-800 truncate">@f.FoodName@if (!string.IsNullOrEmpty(f.PreparationMethod)) {<span class="text-[11px] text-gray-400 font-normal italic"> · @f.PreparationMethod</span>}</span>
                                 @{ var qty = FormatQty(f); var kcalUngrouped = KcalOf(f); }
-                                @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@qty</span> }
-                                @if (kcalUngrouped is double kcu) { <span class="text-[10px] text-gray-300 flex-shrink-0 tabular-nums">≈@((int)Math.Round(kcu)) kcal</span> }
-                                @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
-                                <button @onclick="async () => await MoveFood(f.Id, -1)" aria-label="Monter @f.FoodName"
-                                        class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↑</button>
-                                <button @onclick="async () => await MoveFood(f.Id, 1)" aria-label="Descendre @f.FoodName"
-                                        class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↓</button>
-                                <button @onclick="() => StartEditFood(f)" @ondragstart:stopPropagation="true"
-                                        aria-label="Modifier l'aliment @f.FoodName"
-                                        class="text-gray-400 hover:text-blue-500 transition-colors flex-shrink-0 p-1.5 -my-1">
-                                    <Icon Name="edit-2" Class="w-3.5 h-3.5" />
-                                </button>
-                                <button @onclick="() => DeleteFood(f.Id)" @ondragstart:stopPropagation="true"
-                                        aria-label="Supprimer l'aliment @f.FoodName"
-                                        class="text-gray-400 hover:text-red-500 transition-colors text-base leading-none flex-shrink-0 p-1.5 -my-1">×</button>
+                                @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] font-medium text-gray-500 tabular-nums flex-shrink-0">@qty</span> }
+                                <span class="w-12 text-right text-[10px] text-gray-300 tabular-nums flex-shrink-0">@(kcalUngrouped is double kcu ? $"≈{(int)Math.Round(kcu)}" : "")</span>
+                                <span class="flex items-center flex-shrink-0">
+                                    <button @onclick="async () => await MoveFood(f.Id, -1)" aria-label="Monter @f.FoodName"
+                                            class="text-gray-300 hover:text-carbon transition-colors px-1 py-1 text-[12px] leading-none font-bold">↑</button>
+                                    <button @onclick="async () => await MoveFood(f.Id, 1)" aria-label="Descendre @f.FoodName"
+                                            class="text-gray-300 hover:text-carbon transition-colors px-1 py-1 text-[12px] leading-none font-bold">↓</button>
+                                    <button @onclick="() => StartEditFood(f)" @ondragstart:stopPropagation="true"
+                                            aria-label="Modifier l'aliment @f.FoodName"
+                                            class="text-gray-300 hover:text-carbon transition-colors p-1.5">
+                                        <Icon Name="edit-2" Class="w-3.5 h-3.5" />
+                                    </button>
+                                    <button @onclick="() => DeleteFood(f.Id)" @ondragstart:stopPropagation="true"
+                                            aria-label="Supprimer l'aliment @f.FoodName"
+                                            class="text-gray-300 hover:text-red-500 transition-colors text-base leading-none p-1.5">×</button>
+                                </span>
                             </div>
                         }
                     }
@@ -361,13 +367,13 @@ else
                 @foreach (var grp in GroupedFoods)
                 {
                     var gName = grp.Key;
-                    <div class="border border-[#e2e8ee] rounded-lg overflow-hidden mb-1.5">
-                        <div class="flex items-center gap-2 px-2.5 py-1 bg-[#f7f9fb] border-b border-[#e8edf2]">
-                            <span class="font-display text-[11px] font-extrabold text-[#4a545e] flex-1">@gName</span>
+                    <div class="border-t border-[#e5eaef]">
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-[#f7f9fb] border-b border-[#eef2f5]">
+                            <span class="font-display text-[11px] font-extrabold text-[#4a545e] flex-1 truncate">@gName</span>
                             <button @onclick="() => DeleteGroup(gName)" aria-label="Supprimer la composition @gName"
                                     class="text-gray-400 hover:text-red-500 text-[10px] transition-colors px-1.5 py-1 -my-1">× Supprimer</button>
                         </div>
-                        <div class="divide-y divide-slate-50 px-2"
+                        <div class="divide-y divide-[#f0f3f6]"
                              @ondragover:preventDefault="true"
                              @ondrop="async () => await DropFoodOnGroup(gName)">
                             @foreach (var food in grp.OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt))
@@ -375,7 +381,7 @@ else
                                 var f = food;
                                 @if (editingFoodId == f.Id)
                                 {
-                                    <div class="border border-primary-200 rounded-lg p-1.5 bg-primary-50/20 my-1">
+                                    <div class="p-2 bg-[#f7f9fb]">
                                         <div class="flex gap-1.5 items-center">
                                             <input @bind="editFoodName" @bind:event="oninput" @onkeyup="OnEditFoodKeyUp"
                                                    type="text" placeholder="Nom…"
@@ -411,32 +417,33 @@ else
                                          @ondragover:preventDefault="true"
                                          @ondrop="async () => await DropFoodOnFood(f.Id)"
                                          @ondrop:stopPropagation="true"
-                                         class="flex items-center gap-2 py-1 pl-1 cursor-grab">
-                                        <span class="w-1.5 h-1.5 rotate-45 bg-[#c3ccd4] flex-shrink-0"></span>
-                                        <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">@f.FoodName</span>
+                                         class="flex items-center gap-1 pl-3 pr-1 py-1.5 bg-white hover:bg-[#fafbfc] cursor-grab transition-colors">
+                                        <span class="w-1.5 h-1.5 rotate-45 bg-[#c3ccd4] flex-shrink-0 mr-1"></span>
+                                        <span class="flex-1 min-w-0 text-[13px] font-medium text-gray-800 truncate">@f.FoodName@if (!string.IsNullOrEmpty(f.PreparationMethod)) {<span class="text-[11px] text-gray-400 font-normal italic"> · @f.PreparationMethod</span>}</span>
                                         @{ var qty = FormatQty(f); var kcalGrouped = KcalOf(f); }
-                                        @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] text-gray-400 flex-shrink-0">@qty</span> }
-                                        @if (kcalGrouped is double kcg) { <span class="text-[10px] text-gray-300 flex-shrink-0 tabular-nums">≈@((int)Math.Round(kcg)) kcal</span> }
-                                        @if (!string.IsNullOrEmpty(f.PreparationMethod)) { <span class="text-[11px] text-gray-400 italic flex-shrink-0">@f.PreparationMethod</span> }
-                                        <button @onclick="async () => await MoveFood(f.Id, -1)" aria-label="Monter @f.FoodName"
-                                                class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↑</button>
-                                        <button @onclick="async () => await MoveFood(f.Id, 1)" aria-label="Descendre @f.FoodName"
-                                                class="text-gray-300 hover:text-carbon transition-colors flex-shrink-0 px-1 py-1 -my-1 text-[12px] leading-none font-bold">↓</button>
-                                        <button @onclick="() => StartEditFood(f)" @ondragstart:stopPropagation="true"
-                                                aria-label="Modifier l'aliment @f.FoodName"
-                                                class="text-gray-400 hover:text-amber-500 transition-colors flex-shrink-0 p-1.5 -my-1">
-                                            <Icon Name="edit-2" Class="w-3.5 h-3.5" />
-                                        </button>
-                                        <button @onclick="() => DeleteFood(f.Id)" @ondragstart:stopPropagation="true"
-                                                aria-label="Supprimer l'aliment @f.FoodName"
-                                                class="text-gray-400 hover:text-red-500 transition-colors text-base leading-none flex-shrink-0 p-1.5 -my-1">×</button>
+                                        @if (!string.IsNullOrEmpty(qty)) { <span class="text-[11px] font-medium text-gray-500 tabular-nums flex-shrink-0">@qty</span> }
+                                        <span class="w-12 text-right text-[10px] text-gray-300 tabular-nums flex-shrink-0">@(kcalGrouped is double kcg ? $"≈{(int)Math.Round(kcg)}" : "")</span>
+                                        <span class="flex items-center flex-shrink-0">
+                                            <button @onclick="async () => await MoveFood(f.Id, -1)" aria-label="Monter @f.FoodName"
+                                                    class="text-gray-300 hover:text-carbon transition-colors px-1 py-1 text-[12px] leading-none font-bold">↑</button>
+                                            <button @onclick="async () => await MoveFood(f.Id, 1)" aria-label="Descendre @f.FoodName"
+                                                    class="text-gray-300 hover:text-carbon transition-colors px-1 py-1 text-[12px] leading-none font-bold">↓</button>
+                                            <button @onclick="() => StartEditFood(f)" @ondragstart:stopPropagation="true"
+                                                    aria-label="Modifier l'aliment @f.FoodName"
+                                                    class="text-gray-300 hover:text-carbon transition-colors p-1.5">
+                                                <Icon Name="edit-2" Class="w-3.5 h-3.5" />
+                                            </button>
+                                            <button @onclick="() => DeleteFood(f.Id)" @ondragstart:stopPropagation="true"
+                                                    aria-label="Supprimer l'aliment @f.FoodName"
+                                                    class="text-gray-300 hover:text-red-500 transition-colors text-base leading-none p-1.5">×</button>
+                                        </span>
                                     </div>
                                 }
                             }
                         </div>
                         @if (addingToCompoName == gName)
                         {
-                            <div class="px-2 pb-2 pt-1 border-t border-amber-50">
+                            <div class="px-3 py-2 border-t border-[#f0f3f6] bg-[#fbfcfd]">
                                 <div class="flex gap-1.5 items-center">
                                     <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood" Placeholder="Aliment…"
                                                       CssClass="w-full bg-slate-50 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 placeholder-gray-400" />
@@ -460,7 +467,7 @@ else
                         }
                         else
                         {
-                            <div class="px-2.5 py-1">
+                            <div class="px-3 py-1 border-t border-[#f0f3f6]">
                                 <button @onclick="() => StartAddFoodToCompo(gName)"
                                         class="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-carbon transition-colors">
                                     <Icon Name="plus" Class="w-2.5 h-2.5" /> Aliment
@@ -473,12 +480,12 @@ else
                 <!-- Composition en attente (nommée, pas encore de food) -->
                 @if (pendingCompoName != null)
                 {
-                    <div class="border border-[#dde3e9] rounded-lg overflow-hidden mb-1.5 bg-[#fbfcfd]">
-                        <div class="flex items-center gap-2 px-2.5 py-1 bg-[#f7f9fb] border-b border-[#e8edf2]">
-                            <span class="font-display text-[11px] font-extrabold text-[#4a545e] flex-1">@pendingCompoName</span>
+                    <div class="border-t border-[#e5eaef] bg-[#fbfcfd]">
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-[#f7f9fb] border-b border-[#eef2f5]">
+                            <span class="font-display text-[11px] font-extrabold text-[#4a545e] flex-1 truncate">@pendingCompoName</span>
                             <button @onclick="CancelAddCompo" class="text-gray-400 hover:text-red-500 text-[10px] transition-colors px-1.5 py-1 -my-1">× Annuler</button>
                         </div>
-                        <div class="px-2 py-2">
+                        <div class="px-3 py-2">
                             <div class="flex gap-1.5 items-center">
                                 <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood" Placeholder="Premier aliment de la préparation…"
                                                   CssClass="w-full bg-white rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
@@ -498,6 +505,8 @@ else
                             @QuickFoodChips
                         </div>
                     </div>
+                }
+                </div>
                 }
 
                 <!-- Ajout : mini-onglets « Aliment | Préparation » — le formulaire s'ouvre sous l'onglet actif -->
@@ -519,22 +528,25 @@ else
 
                     @if (showAddFoodForm)
                     {
-                        <div class="mt-1.5 p-2 bg-slate-50 rounded-lg">
-                            <div class="flex gap-1.5 items-center">
-                                <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood"
-                                                  CssClass="w-full bg-white rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
-                                <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)" aria-label="Ajouter l'aliment"
-                                        class="bg-volt hover:bg-volt-dark disabled:opacity-30 text-carbon px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">+</button>
-                            </div>
-                            <div class="flex gap-1 items-center mt-1 flex-wrap">
-                                <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
-                                       class="w-12 bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 text-center placeholder-gray-400" />
-                                <select @bind="newFoodQtyUnit" class="bg-white rounded-md px-1 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 max-w-[72px]">
-                                    @UnitOptions
-                                </select>
-                                <span class="text-slate-200 text-xs select-none">│</span>
-                                <input @bind="newFoodPrep" type="text" placeholder="Préparation…"
-                                       class="flex-1 min-w-[80px] bg-white rounded-md px-1.5 py-1 text-[11px] text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-200 placeholder-gray-400" />
+                        <div class="mt-1.5">
+                            @* Groupe de champs unifié : saisie + bouton pleine hauteur,
+                               quantité / unité / préparation en seconde ligne interne *@
+                            <div class="rounded-lg border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] focus-within:border-primary-300 focus-within:ring-1 focus-within:ring-primary-200">
+                                <div class="flex items-stretch">
+                                    <FoodAutocomplete @bind-Value="newFoodName" Suggestions="FoodSuggestions" Catalog="Catalog" OnPickCatalog="ApplyCatalogPick" OnEnter="AddFood"
+                                                      CssClass="w-full bg-transparent rounded-tl-lg px-3 py-2 text-sm border-0 focus:outline-none placeholder-gray-400" />
+                                    <button @onclick="AddFood" disabled="@string.IsNullOrWhiteSpace(newFoodName)" aria-label="Ajouter l'aliment"
+                                            class="bg-volt hover:bg-volt-dark disabled:opacity-40 text-carbon px-4 rounded-tr-[7px] text-[12px] font-extrabold uppercase tracking-[.06em] transition-colors flex-shrink-0">Ajouter</button>
+                                </div>
+                                <div class="flex items-center border-t border-[#eef2f5] divide-x divide-[#eef2f5]">
+                                    <input @bind="newFoodQtyVal" type="number" min="0" step="any" placeholder="Qté"
+                                           class="w-16 px-2 py-1.5 text-[11px] text-gray-600 text-center bg-transparent border-0 focus:outline-none placeholder-gray-400" />
+                                    <select @bind="newFoodQtyUnit" class="px-1.5 py-1.5 text-[11px] text-gray-600 bg-transparent border-0 focus:outline-none max-w-[80px]">
+                                        @UnitOptions
+                                    </select>
+                                    <input @bind="newFoodPrep" type="text" placeholder="Préparation (facultatif)"
+                                           class="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] text-gray-600 bg-transparent border-0 rounded-br-lg focus:outline-none placeholder-gray-400" />
+                                </div>
                             </div>
                             @QuickFoodChips
                         </div>
@@ -542,12 +554,12 @@ else
 
                     @if (showAddCompoForm)
                     {
-                        <div class="mt-1.5 p-2 bg-slate-50 rounded-lg">
-                            <div class="flex gap-1.5 items-center">
+                        <div class="mt-1.5">
+                            <div class="flex items-stretch rounded-lg border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] focus-within:border-primary-300 focus-within:ring-1 focus-within:ring-primary-200">
                                 <input @bind="newCompoName" @bind:event="oninput" @onkeyup="OnCompoKeyUp" type="text" placeholder="Nom de la préparation — ex : Sandwich au thon…"
-                                       class="flex-1 min-w-0 bg-white rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 placeholder-gray-400" />
+                                       class="flex-1 min-w-0 bg-transparent rounded-l-lg px-3 py-2 text-sm border-0 focus:outline-none placeholder-gray-400" />
                                 <button @onclick="CreateComposition" disabled="@string.IsNullOrWhiteSpace(newCompoName)" aria-label="Créer la préparation"
-                                        class="bg-volt hover:bg-volt-dark disabled:opacity-30 text-carbon px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0">→</button>
+                                        class="bg-volt hover:bg-volt-dark disabled:opacity-40 text-carbon px-4 rounded-r-[7px] text-[12px] font-extrabold uppercase tracking-[.06em] transition-colors flex-shrink-0">Créer</button>
                             </div>
                             @if (QuickCompositions.Count > 0)
                             {
@@ -576,7 +588,7 @@ else
                 <div class="relative">
                     <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
                             aria-label="Ajouter une boisson"
-                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee] transition-colors">
+                            class="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">
                         💧 Boisson <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
                     </button>
                     @if (openPanel == PanelDrinks)
@@ -608,12 +620,12 @@ else
                 @if (Event.MealSlot.HasValue)
                 {
                     <button @onclick="AddConcurrentActivity"
-                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee] transition-colors">
+                            class="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">
                         🏃 Activité pendant le repas
                     </button>
                 }
                 @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
-                    <span class="inline-flex items-center gap-0.5 bg-[#eff3f6] text-[#5b6570] text-[11px] pl-1 pr-2 py-0.5 rounded-[6px]">
+                    <span class="inline-flex items-center gap-0.5 h-7 bg-[#eff3f6] text-[#4a545e] font-medium text-[11px] pl-1 pr-2 rounded-lg">
                         <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">‹</button>
                         <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">›</button>
                         💧 @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
@@ -716,7 +728,7 @@ else
                 <div class="relative">
                     <button @onclick="() => TogglePanel(PanelDrinks)" aria-haspopup="true" aria-expanded="@(openPanel == PanelDrinks ? "true" : "false")"
                             aria-label="Ajouter une boisson"
-                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#eff3f6] text-[#5b6570] hover:bg-[#e4e9ee] transition-colors">
+                            class="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">
                         💧 Boisson <span class="text-[9px]" aria-hidden="true">@(openPanel == PanelDrinks ? "▲" : "▼")</span>
                     </button>
                     @if (openPanel == PanelDrinks)
@@ -746,7 +758,7 @@ else
                     }
                 </div>
                 @foreach (var (dname, dcount, dentries) in DrinkGroups) { var lastId = dentries[^1].Id; var dlabel = dcount > 1 ? $"{dcount}× {dname}" : dname;
-                    <span class="inline-flex items-center gap-0.5 bg-[#eff3f6] text-[#5b6570] text-[11px] pl-1 pr-2 py-0.5 rounded-[6px]">
+                    <span class="inline-flex items-center gap-0.5 h-7 bg-[#eff3f6] text-[#4a545e] font-medium text-[11px] pl-1 pr-2 rounded-lg">
                         <button @onclick="async () => await MoveDrinkGroup(dname, -1)" aria-label="Avancer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">‹</button>
                         <button @onclick="async () => await MoveDrinkGroup(dname, 1)" aria-label="Reculer la boisson @dname" class="text-[#aeb8c0] hover:text-carbon font-bold leading-none px-1 py-1 -my-1">›</button>
                         💧 @dlabel <button @onclick="() => DeleteDrink(lastId)" aria-label="Supprimer la boisson @dname" class="hover:text-red-500 ml-0.5 leading-none p-1 -my-1">×</button>
@@ -902,7 +914,7 @@ else
             </div>
         }
         @if (uploadError != null) { <p role="alert" class="text-red-500 text-[11px] mb-1">@uploadError</p> }
-        <label class="inline-flex items-center gap-1 cursor-pointer px-2.5 py-1 bg-[#eff3f6] hover:bg-[#e4e9ee] rounded-[6px] text-[11px] font-semibold text-[#5b6570] transition-colors">
+        <label class="inline-flex items-center gap-1 h-7 cursor-pointer px-2.5 border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] hover:bg-[#f7f9fb] rounded-lg text-[11px] font-semibold text-[#4a545e] transition-colors">
             <Icon Name="camera" Class="w-3.5 h-3.5" /> Photo
             <InputFile OnChange="UploadPhoto" accept="image/*" multiple class="hidden" />
         </label>
