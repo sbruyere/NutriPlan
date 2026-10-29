@@ -470,6 +470,27 @@ else
                 </div>
             </div>
 
+            <!-- ── Saisie express : une phrase (dictée du clavier ou tapée) → aliments structurés ── -->
+            @if (showExpress)
+            {
+                <ExpressCapture Catalog="@catalog" FoodSuggestions="@foodSuggestions"
+                                InitialSlot="@MealPhraseParser.NearestSlot(Time.TimeNow)"
+                                OnCommit="CommitExpress" OnClose="() => showExpress = false" />
+            }
+            else
+            {
+                <button @onclick="() => showExpress = true"
+                        class="w-full flex items-center gap-2.5 bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.25)] px-4 py-3 text-left hover:shadow-[0_1px_0_rgba(20,26,31,.06),0_12px_20px_-12px_rgba(20,26,31,.4)] transition-shadow print:hidden">
+                    <span class="w-7 h-7 rounded-lg bg-carbon flex items-center justify-center flex-shrink-0">
+                        <Icon Name="zap" Class="w-3.5 h-3.5 text-volt" />
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-[13px] font-bold text-carbon leading-tight">Saisie express</span>
+                        <span class="block text-[10.5px] text-gray-400 leading-tight mt-0.5 truncate">Décrivez votre repas en une phrase — l'agent remplit le carnet</span>
+                    </span>
+                </button>
+            }
+
             <!-- ── Déplacement d'une journée saisie sur la mauvaise date ──────── -->
             @if (showMoveDay)
             {
@@ -1406,6 +1427,26 @@ else
             selectedDate = moveTargetDate; // on suit la journée déplacée
             await LoadDay();
             Toast.ShowSuccess("Journée déplacée ✓");
+        }
+        catch { Toast.ShowError(SaveError); }
+    }
+
+    // ── Saisie express ──────────────────────────────────────────────────────
+    bool showExpress;
+
+    async Task CommitExpress(ExpressCapture.ExpressResult result)
+    {
+        try
+        {
+            var log = await DiaryService.GetOrCreateDailyLogAsync(diary!.Id, selectedDate);
+            var evt = await DiaryService.GetOrCreateMealSlotEventAsync(log.Id, result.SlotIndex);
+            if (result.Time is TimeOnly t)
+                await DiaryService.UpdateEventTimeAsync(evt.Id, t);
+            foreach (var e in result.Entries)
+                await DiaryService.AddFoodEntryAsync(evt.Id, e.FoodName, e.Quantity, e.Unit, e.Preparation, null, e.CatalogFoodId);
+            showExpress = false;
+            await LoadDay();
+            Toast.ShowSuccess($"{result.Entries.Count} aliment(s) ajouté(s) au {DiaryService.MealSlots[result.SlotIndex].Label} ✓");
         }
         catch { Toast.ShowError(SaveError); }
     }

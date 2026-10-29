@@ -46,4 +46,9 @@ public class BrowserTimeService(IJSRuntime js)
         await InitializeAsync();
         return Today;
     }
+
+    /// <summary>Heure courante côté client (repli : heure du serveur) — ex. pré-choix du créneau de repas.</summary>
+    public TimeOnly TimeNow => _tz == null
+        ? TimeOnly.FromDateTime(DateTime.Now)
+        : TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _tz));
 }

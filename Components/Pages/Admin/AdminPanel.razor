@@ -3,6 +3,8 @@
 @inject DiarySessionService Session
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject SettingsService Settings
+@inject AiMealParserService AiParser
 
 <PageTitle>Administration — NutriPlan</PageTitle>
 
@@ -236,6 +238,51 @@ else
                 </div>
             </div>
 
+            <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                <h3 class="font-display text-[13px] font-extrabold text-carbon">Agent IA de saisie express</h3>
+                <p class="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                    Optionnel. Sans configuration, l'analyse des phrases est faite localement (gratuite).
+                    Avec un fournisseur configuré, l'IA prend le relais pour les phrases complexes —
+                    seule la phrase du repas lui est transmise, jamais l'identité du patient.
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
+                    <select @bind="aiProvider" aria-label="Fournisseur IA"
+                            class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+                        <option value="">Aucun — analyse locale uniquement</option>
+                        <option value="anthropic">Claude API (Anthropic)</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="azure">Azure OpenAI</option>
+                    </select>
+                    <input @bind="aiModel" placeholder="@(aiProvider == "azure" ? "Nom du déploiement" : aiProvider == "openai" ? "Modèle (ex. gpt-4o-mini)" : "Modèle (ex. claude-opus-5-5)")"
+                           aria-label="Modèle" disabled="@(aiProvider == "")"
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400 disabled:opacity-50" />
+                    <input @bind="aiApiKey" type="password" autocomplete="off"
+                           placeholder="@(aiKeyConfigured ? "Clé d'API enregistrée — saisir pour remplacer" : "Clé d'API")"
+                           aria-label="Clé d'API" disabled="@(aiProvider == "")"
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400 disabled:opacity-50" />
+                    @if (aiProvider == "azure")
+                    {
+                        <input @bind="aiEndpoint" placeholder="https://ma-ressource.openai.azure.com"
+                               aria-label="Endpoint Azure"
+                               class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+                    }
+                </div>
+                <div class="flex items-center gap-2 mt-3">
+                    <button @onclick="SaveAiConfig"
+                            class="bg-carbon hover:bg-carbon-2 text-snow px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] transition-colors">
+                        Enregistrer
+                    </button>
+                    <button @onclick="TestAiConfig" disabled="@aiTesting"
+                            class="bg-white border border-[#dfe5ea] hover:border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] transition-colors disabled:opacity-50">
+                        @(aiTesting ? "Test…" : "Tester")
+                    </button>
+                    @if (aiTestResult != null)
+                    {
+                        <p class="text-[11px] leading-snug @(aiTestOk ? "text-[#3d7a1f]" : "text-red-500")">@aiTestResult</p>
+                    }
+                </div>
+            </div>
+
             <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4 max-w-md">
                 <h3 class="font-display text-[13px] font-extrabold text-carbon mb-2">Changer mon mot de passe</h3>
                 <div class="space-y-2.5">
@@ -275,6 +322,43 @@ else
     bool backupRunning;
     string pwdCurrent = "", pwdNew = "";
 
+    // ── Agent IA (saisie express) ───────────────────────────────────────────
+    string aiProvider = "", aiModel = "", aiApiKey = "", aiEndpoint = "";
+    bool aiKeyConfigured, aiTesting, aiTestOk;
+    string? aiTestResult;
+
+    async Task LoadAiConfigAsync()
+    {
+        var (provider, key, model, endpoint) = await Settings.GetAiConfigAsync();
+        aiProvider = provider; aiModel = model; aiEndpoint = endpoint;
+        aiKeyConfigured = key != "";
+        aiApiKey = ""; // la clé enregistrée n'est jamais réaffichée
+    }
+
+    async Task SaveAiConfig()
+    {
+        await Settings.SetAsync(SettingsService.AiProviderKey, aiProvider);
+        await Settings.SetAsync(SettingsService.AiModelKey, aiModel.Trim());
+        await Settings.SetAsync(SettingsService.AiEndpointKey, aiEndpoint.Trim());
+        if (aiProvider == "")
+            await Settings.SetAsync(SettingsService.AiApiKeyKey, ""); // désactivation = clé purgée
+        else if (!string.IsNullOrWhiteSpace(aiApiKey))
+            await Settings.SetAsync(SettingsService.AiApiKeyKey, aiApiKey.Trim());
+        aiTestResult = null;
+        await LoadAiConfigAsync();
+        Toast.ShowSaved();
+    }
+
+    async Task TestAiConfig()
+    {
+        aiTesting = true; aiTestResult = null;
+        try
+        {
+            (aiTestOk, aiTestResult) = await AiParser.TestAsync();
+        }
+        finally { aiTesting = false; }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await Session.EnsureLoadedAsync();
@@ -294,6 +378,7 @@ else
         if (t == "Nutritionnistes") nutritionists = await AdminSvc.GetNutritionistsAsync();
         if (t == "Carnets") diaries = await AdminSvc.GetDiariesAsync(diarySearch);
         if (t is "Vue d'ensemble" or "Système") overview = await AdminSvc.GetOverviewAsync();
+        if (t == "Système") await LoadAiConfigAsync();
     }
 
     async Task ReloadDiaries() => diaries = await AdminSvc.GetDiariesAsync(diarySearch);

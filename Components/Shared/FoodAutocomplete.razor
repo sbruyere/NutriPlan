@@ -63,49 +63,12 @@
     int highlighted = -1;
     List<Item> filtered = [];
 
-    // Minuscules sans diacritiques — « creme » trouve « Crème fraîche ».
-    static string Fold(string s)
-    {
-        var sb = new StringBuilder(s.Length);
-        foreach (var c in s.Normalize(NormalizationForm.FormD))
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
-                sb.Append(char.ToLowerInvariant(c));
-        return sb.ToString();
-    }
+    // Pliage, pureté et correspondance multi-mots : logique partagée FoodSearch
+    // (également utilisée par la saisie express).
+    static string Fold(string s) => FoodSearch.Fold(s);
 
     static string? CatalogHint(CatalogFood c) =>
         c.KcalPer100g is double k ? $"{k:0} kcal/100 g" : null;
-
-    // ── Tri par « pureté » : l'aliment brut avant la préparation qui le contient ──
-    // « Riz blanc, cuit » doit précéder « Salade de riz au thon…, préemballée ».
-    // Marqueurs de transformation/composition repérés dans le nom plié (sans accents).
-    static readonly string[] ComposedMarkers =
-    [
-        "preemball", "appertis", "surgel", "cuisin", "du commerce", "rayon frais",
-        "fait maison", "plat ", "salade de", "sauce", "farci", "pane", "nappe",
-        "fourre", "aromatis", "enrichi", "assaisonn", "melange", "dessert",
-        "biscuit", "snack", "barre ", "confiture", "compote", "infantile",
-    ];
-
-    static int PurityScore(CatalogFood c)
-    {
-        var f = c.SearchName;
-        int score = 0;
-        foreach (var m in ComposedMarkers) if (f.Contains(m)) score += 4;
-        score += f.Count(ch => ch == ',');   // chaque qualificatif éloigne de l'aliment brut
-        score += f.Length / 24;              // les intitulés interminables en dernier
-        // « cru » est un état de composition du référentiel, pas une assiette :
-        // pour la viande, le poisson et les fruits de mer, on saisit la version
-        // cuite — les variantes crues restent proposées, mais après.
-        if (f.Contains(" cru"))   // « , cru » mais aussi « côte crue », « viande crue »…
-        {
-            var sg = Fold(c.SubGroupName ?? "");
-            if (sg.Contains("viande") || sg.Contains("poisson") || sg.Contains("mollusque")
-                || sg.Contains("crustace") || sg.Contains("charcuterie") || sg.Contains("oeufs"))
-                score += 4;
-        }
-        return score;
-    }
 
     void Refilter()
     {
@@ -113,7 +76,7 @@
         // Recherche multi-mots : « poulet rot » trouve « Poulet, viande rôtie » —
         // chaque mot doit apparaître quelque part dans le nom plié.
         var tokens = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        bool Matches(string folded) => tokens.All(folded.Contains);
+        bool Matches(string folded) => FoodSearch.Matches(folded, tokens);
 
         var items = new List<Item>();
         var taken = new HashSet<string>();
@@ -130,15 +93,11 @@
             if (items.Count >= MaxHistory) break;
         }
 
-        // 2. Référentiel (à partir de 2 caractères) — préfixe d'abord, puis les
-        //    aliments les plus « purs » avant les préparations composées.
+        // 2. Référentiel (à partir de 2 caractères) — classement partagé
+        //    FoodSearch : début de mot (singulier accepté) puis « pureté ».
         if (q.Length >= 2)
         {
-            var ordered = Catalog.Where(c => Matches(c.SearchName))
-                .OrderBy(c => c.SearchName.StartsWith(tokens[0]) ? 0 : 1)
-                .ThenBy(PurityScore)
-                .ThenBy(c => c.Name.Length);
-            foreach (var c in ordered)
+            foreach (var c in FoodSearch.Rank(Catalog, q, MaxTotal * 3))
             {
                 if (items.Count >= MaxTotal) break;
                 if (!taken.Add(c.SearchName)) continue;

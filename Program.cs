@@ -40,6 +40,8 @@ builder.Services.AddScoped<DiaryService>();
 builder.Services.AddScoped<NutriPlan.Services.StravaService>();
 builder.Services.AddScoped<NutritionistService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<SettingsService>();
+builder.Services.AddScoped<AiMealParserService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<BrowserTimeService>();
 
@@ -152,6 +154,9 @@ using (var scope = app.Services.CreateScope())
             "Source" TEXT NOT NULL DEFAULT 'ciqual');
         """);
     ctx.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_CatalogFoods_SearchName\" ON \"CatalogFoods\" (\"SearchName\");");
+    // Quelques SearchName du seed portent des ligatures (« bœuf ») que le pliage
+    // de recherche décompose désormais (« boeuf ») : normalisation idempotente.
+    ctx.Database.ExecuteSqlRaw("UPDATE CatalogFoods SET SearchName = REPLACE(REPLACE(SearchName, 'œ', 'oe'), 'æ', 'ae') WHERE SearchName LIKE '%œ%' OR SearchName LIKE '%æ%';");
     // Macronutriments ajoutés après la première version du référentiel.
     foreach (var macroCol in new[] { "ProteinPer100g", "CarbsPer100g", "SugarsPer100g", "FatPer100g", "SatFatPer100g", "FiberPer100g", "SaltPer100g" })
     {
@@ -197,6 +202,12 @@ using (var scope = app.Services.CreateScope())
             "LastLoginAt" TEXT NULL);
         """);
     ctx.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Admins_Email\" ON \"Admins\" (\"Email\");");
+    // Réglages de plateforme (fournisseur IA de la saisie express, etc.).
+    ctx.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "AppSettings" (
+            "Key" TEXT NOT NULL CONSTRAINT "PK_AppSettings" PRIMARY KEY,
+            "Value" TEXT NOT NULL);
+        """);
 
     // Colonnes ajoutées après l'introduction des tables ci-dessus.
     foreach (var lateCol in new[] { "DayComments|PatientReaction TEXT", "FoodDiaries|TargetWeightKg REAL",

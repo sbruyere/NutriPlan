@@ -1,0 +1,266 @@
+@inject DiaryService DiarySvc
+@inject AiMealParserService AiParser
+
+@* Saisie express : l'utilisateur dicte (clavier natif du téléphone) ou tape
+   sa phrase ; l'agent la découpe en aliments structurés (MealPhraseParser),
+   cherche chacun dans le référentiel, et propose une revue corrigeable avant
+   l'ajout au créneau choisi. Aucun appel IA : tout est local et instantané. *@
+<div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] print:hidden">
+    <div class="flex items-center justify-between px-4 pt-3.5 pb-0">
+        <div class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 bg-volt" aria-hidden="true"></span>
+            <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-gray-400">Saisie express</span>
+        </div>
+        <button @onclick="OnClose" aria-label="Fermer la saisie express"
+                class="text-gray-400 hover:text-gray-600 text-lg leading-none p-1.5 -m-1.5 transition-colors">×</button>
+    </div>
+
+    @if (rows == null)
+    {
+        <div class="p-4 pt-3 space-y-2.5">
+            <textarea @bind="phrase" @bind:event="oninput" rows="2" autofocus
+                      placeholder="Ex. : à midi, 150 g de riz complet bio, deux œufs et une tomate"
+                      class="w-full bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 border-0 placeholder-gray-400 resize-none"></textarea>
+            <div class="flex items-center justify-between gap-2">
+                <p class="text-[10px] text-gray-400 leading-snug">Décrivez le repas en une phrase — au micro du clavier ou en tapant. Quantités, « bio » et créneau sont compris.</p>
+                <button @onclick="Analyze" disabled="@(string.IsNullOrWhiteSpace(phrase) || analyzing)"
+                        class="bg-volt hover:bg-volt-dark disabled:opacity-40 text-carbon px-4 py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[.08em] transition-colors flex-shrink-0">
+                    @(analyzing ? "Analyse…" : "Analyser")
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="p-4 pt-3 space-y-3">
+            @* Créneau de destination — pré-choisi d'après la phrase ou l'heure *@
+            <div class="flex flex-wrap gap-1.5">
+                @for (int i = 0; i < DiaryService.MealSlots.Length; i++)
+                {
+                    var idx = i;
+                    var s = DiaryService.MealSlots[i];
+                    <button @onclick="() => slotIndex = idx"
+                            class="h-7 px-2.5 rounded-full text-[10px] font-bold transition-colors
+                                   @(slotIndex == idx ? "bg-carbon text-volt" : "bg-white border border-[#dfe5ea] text-gray-500 hover:border-gray-300 shadow-[0_1px_2px_rgba(20,26,31,.05)]")">
+                        @s.Icon @s.Label
+                    </button>
+                }
+            </div>
+
+            @if (rows.Count == 0)
+            {
+                <p class="text-xs text-gray-400">Aucun aliment reconnu dans la phrase — reformulez, par exemple « 100 g de lentilles et une tomate ».</p>
+            }
+            else
+            {
+                <div class="rounded-lg border border-[#e5eaef] divide-y divide-[#f0f3f6]">
+                    @foreach (var row in rows)
+                    {
+                        <div class="px-3 py-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <div class="flex-1 min-w-0">
+                                    @if (row.Selected != null)
+                                    {
+                                        <p class="text-sm text-gray-800 leading-snug">@row.Selected.Name</p>
+                                    }
+                                    else
+                                    {
+                                        <FoodAutocomplete @bind-Value="row.ManualName" Suggestions="FoodSuggestions" Catalog="Catalog"
+                                                          OnPickCatalog="c => PickManual(row, c)" Placeholder="Aliment introuvable — précisez…"
+                                                          CssClass="w-full bg-amber-50 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 placeholder-amber-600/60" />
+                                    }
+                                </div>
+                                <input @bind="row.QtyText" @bind:event="oninput" inputmode="decimal" aria-label="Quantité"
+                                       class="w-12 bg-slate-50 rounded-md px-1.5 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 flex-shrink-0" />
+                                <select @bind="row.Unit" aria-label="Unité"
+                                        class="w-[4.6rem] bg-slate-50 rounded-md px-1 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-300 border-0 flex-shrink-0">
+                                    <option value="">@(row.Selected?.DefaultUnit ?? "unité")</option>
+                                    @foreach (var u in Units) { <option value="@u">@u</option> }
+                                </select>
+                                <span class="w-14 text-right text-xs font-bold text-gray-500 tabular-nums flex-shrink-0">
+                                    @(RowKcal(row) is double k ? $"{k:0} kcal" : "—")
+                                </span>
+                                <button @onclick="() => rows.Remove(row)" aria-label="Retirer cet aliment"
+                                        class="p-1.5 -m-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
+                                    <Icon Name="trash-2" Class="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            @if (row.Candidates.Count > 1 || row.IsBio)
+                            {
+                                <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                    @if (row.IsBio)
+                                    {
+                                        <span class="h-5 inline-flex items-center px-1.5 rounded-[4px] bg-[#eaf6e2] text-[#3d7a1f] text-[9px] font-extrabold uppercase tracking-wide">Bio</span>
+                                    }
+                                    @foreach (var c in row.Candidates.Take(3))
+                                    {
+                                        var cand = c;
+                                        <button @onclick="() => SelectCandidate(row, cand)"
+                                                class="h-6 max-w-[16rem] truncate px-2 rounded-full text-[10px] font-semibold transition-colors
+                                                       @(row.Selected?.Id == cand.Id ? "bg-carbon text-volt" : "bg-white border border-[#dfe5ea] text-gray-500 hover:border-gray-300")">
+                                            @cand.Name
+                                        </button>
+                                    }
+                                    @if (row.Selected != null)
+                                    {
+                                        <button @onclick="() => ClearSelection(row)"
+                                                class="h-6 px-2 rounded-full text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors">
+                                            autre…
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <button @onclick="() => { rows = null; }"
+                            class="text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors">
+                        ← Reformuler
+                    </button>
+                    <span class="text-[9px] font-bold uppercase tracking-wide text-gray-300" title="Moteur d'analyse utilisé">@engineLabel</span>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    @if (TotalKcal is double total && total > 0)
+                    {
+                        <span class="text-xs font-bold text-gray-500 tabular-nums">≈ @($"{total:0}") kcal</span>
+                    }
+                    <button @onclick="Commit" disabled="@(!HasCommittable)"
+                            class="bg-volt hover:bg-volt-dark disabled:opacity-40 text-carbon px-4 py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[.08em] transition-colors">
+                        Tout ajouter
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<CatalogFood> Catalog { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> FoodSuggestions { get; set; } = [];
+    [Parameter] public int InitialSlot { get; set; }
+    [Parameter] public EventCallback<ExpressResult> OnCommit { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    public sealed record ExpressEntry(string FoodName, string? Quantity, string? Unit, int? CatalogFoodId, string? Preparation);
+    public sealed record ExpressResult(int SlotIndex, TimeOnly? Time, List<ExpressEntry> Entries);
+
+    sealed class Row
+    {
+        public required string Raw { get; init; }
+        public List<CatalogFood> Candidates { get; set; } = [];
+        public CatalogFood? Selected { get; set; }
+        public string ManualName { get; set; } = "";
+        public string QtyText { get; set; } = "";
+        public string Unit { get; set; } = "";
+        public bool IsBio { get; set; }
+    }
+
+    static readonly string[] Units =
+    [
+        "g", "kg", "ml", "cl", "L", "c. à café", "c. à soupe", "verre", "tasse",
+        "bol", "pot", "pincée", "tranche(s)", "part(s)", "portion", "morceau(x)",
+        "boule(s)", "poignée", "assiette", "pièce(s)", "filet(s)",
+    ];
+
+    string phrase = "";
+    List<Row>? rows;
+    int slotIndex;
+    TimeOnly? explicitTime;
+    bool analyzing;
+    string engineLabel = "";
+
+    protected override void OnInitialized() => slotIndex = InitialSlot;
+
+    async Task Analyze()
+    {
+        analyzing = true;
+        try
+        {
+            // Fournisseur IA configuré dans l'admin → IA d'abord ; sinon — ou en
+            // cas d'échec/expiration — repli silencieux sur l'analyse locale.
+            MealPhraseParser.ParsedMeal? parsed = null;
+            if (await AiParser.IsConfiguredAsync())
+                parsed = await AiParser.ParseAsync(phrase);
+            engineLabel = parsed != null ? "Analyse IA" : "Analyse locale";
+            parsed ??= MealPhraseParser.Parse(phrase);
+            slotIndex = parsed.SlotIndex ?? InitialSlot;
+            explicitTime = parsed.ExplicitTime;
+            rows = parsed.Items.Select(BuildRow).ToList();
+        }
+        finally { analyzing = false; }
+    }
+
+    Row BuildRow(MealPhraseParser.ParsedItem item)
+    {
+        // « bio » demandé : les déclinaisons bio du référentiel d'abord, puis
+        // les classiques. Les habitudes du carnet passent devant tout le reste.
+        var candidates = new List<CatalogFood>();
+        if (item.IsBio) candidates.AddRange(FoodSearch.Rank(Catalog, item.Query + " bio", 2));
+        var tokens = FoodSearch.Tokenize(item.Query);
+        foreach (var habit in FoodSuggestions)
+            if (tokens.Length > 0 && FoodSearch.Matches(FoodSearch.Fold(habit), tokens)
+                && DiarySvc.FindCatalogFoodByName(habit) is CatalogFood hc
+                && candidates.All(c => c.Id != hc.Id))
+                candidates.Add(hc);
+        foreach (var c in FoodSearch.Rank(Catalog, item.Query, 4))
+            if (candidates.All(x => x.Id != c.Id)) candidates.Add(c);
+
+        return new Row
+        {
+            Raw = item.Raw,
+            Candidates = candidates,
+            Selected = candidates.FirstOrDefault(),
+            QtyText = item.Qty is double q ? q.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture) : "",
+            Unit = item.Unit ?? "",
+            IsBio = item.IsBio,
+            ManualName = candidates.Count == 0 ? item.Raw : "",
+        };
+    }
+
+    static void SelectCandidate(Row row, CatalogFood c) { row.Selected = c; row.ManualName = ""; }
+    static void ClearSelection(Row row) { row.Selected = null; row.ManualName = ""; }
+
+    void PickManual(Row row, CatalogFood c)
+    {
+        row.Selected = c;
+        if (string.IsNullOrWhiteSpace(row.Unit)) row.Unit = "";
+        if (string.IsNullOrWhiteSpace(row.QtyText) && c.TypicalQty is double q)
+            row.QtyText = q.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture);
+    }
+
+    double? RowKcal(Row row)
+    {
+        if (row.Selected is not CatalogFood c || c.KcalPer100g is not double k100) return null;
+        var raw = row.QtyText.Trim().Replace(',', '.');
+        if (!double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var qty)) return null;
+        var unit = string.IsNullOrWhiteSpace(row.Unit) ? c.DefaultUnit : row.Unit;
+        return DiaryService.ToGrams(qty, unit, c.UnitWeightG) is double g ? k100 * g / 100.0 : null;
+    }
+
+    double? TotalKcal => rows?.Select(RowKcal).Where(k => k != null).Sum();
+
+    bool HasCommittable => rows != null && rows.Any(r => r.Selected != null || !string.IsNullOrWhiteSpace(r.ManualName));
+
+    async Task Commit()
+    {
+        if (rows == null) return;
+        var entries = new List<ExpressEntry>();
+        foreach (var r in rows)
+        {
+            var name = r.Selected?.Name ?? r.ManualName.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var unit = string.IsNullOrWhiteSpace(r.Unit) ? r.Selected?.DefaultUnit : r.Unit;
+            // « bio » voyagera en préparation si le nom retenu ne le porte pas déjà.
+            string? prep = r.IsBio && !FoodSearch.Fold(name).Contains("bio") ? "bio" : null;
+            entries.Add(new ExpressEntry(name,
+                string.IsNullOrWhiteSpace(r.QtyText) ? null : r.QtyText.Trim(),
+                unit, r.Selected?.Id, prep));
+        }
+        if (entries.Count == 0) return;
+        await OnCommit.InvokeAsync(new ExpressResult(slotIndex, explicitTime, entries));
+    }
+}

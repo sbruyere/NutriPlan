@@ -933,15 +933,9 @@ public class DiaryService(IDbContextFactory<NutriPlanContext> factory)
         return catalogCache;
     }
 
-    // Minuscules sans diacritiques — même pliage que SearchName du seed.
-    public static string FoldFoodName(string s)
-    {
-        var sb = new System.Text.StringBuilder(s.Length);
-        foreach (var c in s.Normalize(System.Text.NormalizationForm.FormD))
-            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
-                sb.Append(char.ToLowerInvariant(c));
-        return sb.ToString();
-    }
+    // Minuscules sans diacritiques ni ligatures — pliage partagé (FoodSearch),
+    // identique au SearchName du seed après normalisation au démarrage.
+    public static string FoldFoodName(string s) => FoodSearch.Fold(s);
 
     public CatalogFood? FindCatalogFoodByName(string? name)
     {
