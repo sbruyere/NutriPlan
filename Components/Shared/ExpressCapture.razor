@@ -18,9 +18,15 @@
     @if (rows == null)
     {
         <div class="p-4 pt-3 space-y-2.5">
-            <textarea @bind="phrase" @bind:event="oninput" rows="2" autofocus
-                      placeholder="Ex. : à midi, 150 g de riz complet bio, deux œufs et une tomate"
-                      class="w-full bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 border-0 placeholder-gray-400 resize-none"></textarea>
+            <div class="relative">
+                <textarea @bind="phrase" @bind:event="oninput" rows="2" autofocus
+                          placeholder="Ex. : à midi, 150 g de riz complet bio, deux œufs et une tomate"
+                          class="w-full bg-slate-50 rounded-lg pl-3.5 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 border-0 placeholder-gray-400 resize-none"></textarea>
+                @* Rappel visuel : la dictée passe par le micro du clavier du téléphone *@
+                <span class="absolute right-3 top-2.5 text-gray-300 pointer-events-none" title="Dictez avec le micro de votre clavier" aria-hidden="true">
+                    <Icon Name="mic" Class="w-4 h-4" />
+                </span>
+            </div>
             <div class="flex items-center justify-between gap-2">
                 <p class="text-[10px] text-gray-400 leading-snug">Décrivez le repas en une phrase — au micro du clavier ou en tapant. Quantités, « bio » et créneau sont compris.</p>
                 <button @onclick="Analyze" disabled="@(string.IsNullOrWhiteSpace(phrase) || analyzing)"

@@ -375,23 +375,12 @@ else
             <div class="flex items-center gap-1.5 flex-shrink-0">
                 @if (!showHistory)
                 {
-                    <div class="flex bg-gray-100 rounded-full p-0.5 text-[11px] font-semibold">
-                        <button @onclick="() => tableView = false"
-                                class="px-3 py-1 rounded-full transition-colors @(!tableView ? "bg-white shadow-sm text-gray-800" : "text-gray-400")">
-                            Frise
-                        </button>
-                        <button @onclick="() => tableView = true"
-                                class="px-3 py-1 rounded-full transition-colors @(tableView ? "bg-white shadow-sm text-gray-800" : "text-gray-400")">
-                            Tableau
-                        </button>
-                    </div>
-                    @if (tableView)
-                    {
-                        <button @onclick="PrintDay" aria-label="Imprimer la journée" title="Imprimer la journée"
-                                class="p-2 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-                            <Icon Name="printer" Class="w-3.5 h-3.5" />
-                        </button>
-                    }
+                    @* Vue tableau : écran dédié pleine largeur, réservé aux grands affichages *@
+                    <a href="@($"/carnet/{AccessCode}/tableau/{selectedDate:yyyy-MM-dd}")"
+                       class="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-full transition-colors">
+                        <Icon Name="table" Class="w-3 h-3" />
+                        <span>Tableau</span>
+                    </a>
                 }
                 <button @onclick="ToggleSharePanel"
                         title="Partager" aria-label="Partager le carnet"
@@ -429,7 +418,7 @@ else
                s'anime vers la page voisine puis le contenu se recale (resetPager).
                Les journées ±3 sont préchargées en cache pour des swipes enchaînés. *@
             <div id="journal-swipe" class="overflow-hidden" style="touch-action: pan-y;"
-                 data-pager-enabled="@(editingEventId == null && !showMoveDay && !tableView ? "1" : "0")"
+                 data-pager-enabled="@(editingEventId == null && !showMoveDay ? "1" : "0")"
                  data-can-next="@(selectedDate < Time.Today ? "1" : "0")">
             @* gap-6 = gouttière visible entre les pages pendant le glissement ;
                la base de translation (-100% - 1.5rem) compense cet interstice. *@
@@ -602,11 +591,11 @@ else
                     <button @onclick="() => showExpress = true"
                             class="w-full flex items-center gap-2.5 bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.25)] px-4 py-3 text-left hover:shadow-[0_1px_0_rgba(20,26,31,.06),0_12px_20px_-12px_rgba(20,26,31,.4)] transition-shadow">
                         <span class="w-7 h-7 rounded-lg bg-carbon flex items-center justify-center flex-shrink-0">
-                            <Icon Name="zap" Class="w-3.5 h-3.5 text-volt" />
+                            <Icon Name="mic" Class="w-3.5 h-3.5 text-volt" />
                         </span>
                         <span class="min-w-0">
                             <span class="block text-[13px] font-bold text-carbon leading-tight">Saisie express</span>
-                            <span class="block text-[10.5px] text-gray-400 leading-tight mt-0.5 truncate">Décrivez votre repas en une phrase — l'agent remplit le carnet</span>
+                            <span class="block text-[10.5px] text-gray-400 leading-tight mt-0.5 truncate">Dictez ou tapez votre repas en une phrase — l'agent remplit le carnet</span>
                         </span>
                     </button>
                 }
@@ -644,18 +633,7 @@ else
                 </div>
             }
 
-            @if (tableView)
-            {
-                <div style="width:100vw;margin-left:calc(50% - 50vw);margin-top:1.25rem;padding:0 1rem;box-sizing:border-box;">
-                    <DiaryTableView
-                        DailyLog="@currentLog"
-                        DiaryId="@diary!.Id"
-                        Date="@selectedDate"
-                        OnChanged="@LoadDay" />
-                </div>
-            }
-            else
-            {
+            @{
                 <!-- Journée — sections plates, timeline fine : heures en marge, pastilles sur rail dégradé -->
                 <div class="relative pl-[60px]">
                     <div class="absolute left-[50px] top-2 bottom-2 w-[2px] bg-[#cbd3da]" aria-hidden="true"></div>
@@ -832,7 +810,6 @@ else
     bool pinError;
     string pinInput = "";
     bool showHistory;
-    bool tableView;
     string emotions = "", generalNotes = "";
 
     // ── Bannière nouveau carnet ──────────────────────────────────────────
@@ -1096,7 +1073,6 @@ else
         await Session.UnlockAsync(code, DiarySessionService.PinStamp(diary!.PinHash));
     }
 
-    async Task PrintDay() => await JS.InvokeVoidAsync("nutriplan.print");
 
     // ── Drag & drop ──────────────────────────────────────────────────────────
     DayEvent? draggedEvent;
@@ -1338,7 +1314,7 @@ else
     {
         // La piste a déjà joué la transition : on change de jour SANS animation
         // d'entrée supplémentaire, puis on recale la piste au centre.
-        if (editingEventId != null || showHistory || showMoveDay || tableView) { pagerNeedsReset = true; StateHasChanged(); return; }
+        if (editingEventId != null || showHistory || showMoveDay) { pagerNeedsReset = true; StateHasChanged(); return; }
         swipeAnim = "";
         editingEventId = null;
         if (direction == "next")
