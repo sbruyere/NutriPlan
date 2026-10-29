@@ -252,8 +252,9 @@ else
                         <option value="anthropic">Claude API (Anthropic)</option>
                         <option value="openai">OpenAI</option>
                         <option value="azure">Azure OpenAI</option>
+                        <option value="openrouter">OpenRouter</option>
                     </select>
-                    <input @bind="aiModel" placeholder="@(aiProvider == "azure" ? "Nom du déploiement" : aiProvider == "openai" ? "Modèle (ex. gpt-4o-mini)" : "Modèle (ex. claude-opus-5-5)")"
+                    <input @bind="aiModel" placeholder="@(aiProvider switch { "azure" => "Nom du déploiement", "openai" => "Modèle (ex. gpt-4o-mini)", "openrouter" => "Modèle (ex. anthropic/claude-haiku-5.5)", _ => "Modèle (ex. claude-haiku-5-5)" })"
                            aria-label="Modèle" disabled="@(aiProvider == "")"
                            class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400 disabled:opacity-50" />
                     <input @bind="aiApiKey" type="password" autocomplete="off"

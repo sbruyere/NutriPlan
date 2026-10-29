@@ -44,7 +44,7 @@ public class AiMealParserService(SettingsService settings, IHttpClientFactory ht
         var (provider, apiKey, model, endpoint) = await settings.GetAiConfigAsync();
         return provider switch
         {
-            "openai" or "anthropic" => apiKey != "" && model != "",
+            "openai" or "anthropic" or "openrouter" => apiKey != "" && model != "",
             "azure" => apiKey != "" && model != "" && endpoint != "",
             _ => false,
         };
@@ -102,34 +102,28 @@ public class AiMealParserService(SettingsService settings, IHttpClientFactory ht
                 messages = new[] { new { role = "user", content = phrase } },
             });
         }
-        else if (provider is "openai" or "azure")
+        else if (provider is "openai" or "azure" or "openrouter")
         {
-            var url = provider == "openai"
-                ? "https://api.openai.com/v1/chat/completions"
-                : $"{endpoint.TrimEnd('/')}/openai/deployments/{Uri.EscapeDataString(model)}/chat/completions?api-version=2024-10-21";
+            // Dialecte « chat/completions » partagé : OpenAI, Azure OpenAI
+            // (déploiement dans l'URL, modèle omis) et OpenRouter (compatible
+            // OpenAI, modèles préfixés « éditeur/modèle »).
+            var url = provider switch
+            {
+                "openai" => "https://api.openai.com/v1/chat/completions",
+                "openrouter" => "https://openrouter.ai/api/v1/chat/completions",
+                _ => $"{endpoint.TrimEnd('/')}/openai/deployments/{Uri.EscapeDataString(model)}/chat/completions?api-version=2024-10-21",
+            };
             req = new HttpRequestMessage(HttpMethod.Post, url);
-            if (provider == "openai") req.Headers.Add("Authorization", $"Bearer {apiKey}");
-            else req.Headers.Add("api-key", apiKey);
-            object body = provider == "openai"
-                ? new
-                {
-                    model,
-                    messages = new object[]
-                    {
-                        new { role = "system", content = SystemPrompt },
-                        new { role = "user", content = phrase },
-                    },
-                    response_format = new { type = "json_object" },
-                }
-                : new
-                {
-                    messages = new object[]
-                    {
-                        new { role = "system", content = SystemPrompt },
-                        new { role = "user", content = phrase },
-                    },
-                    response_format = new { type = "json_object" },
-                };
+            if (provider == "azure") req.Headers.Add("api-key", apiKey);
+            else req.Headers.Add("Authorization", $"Bearer {apiKey}");
+            var messages = new object[]
+            {
+                new { role = "system", content = SystemPrompt },
+                new { role = "user", content = phrase },
+            };
+            object body = provider == "azure"
+                ? new { messages, response_format = new { type = "json_object" } }
+                : new { model, messages, response_format = new { type = "json_object" } };
             req.Content = JsonContent(body);
         }
         else return null;
