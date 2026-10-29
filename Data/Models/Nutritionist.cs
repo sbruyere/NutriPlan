@@ -17,5 +17,8 @@ public class Nutritionist
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // Suspendu par l'administration : connexion refusée, données conservées.
+    public bool IsSuspended { get; set; }
+
     public ICollection<FoodDiary> Diaries { get; set; } = [];
 }

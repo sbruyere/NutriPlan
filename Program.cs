@@ -24,9 +24,12 @@ var uploadsDir = isAzure
 Directory.CreateDirectory(dataDir);
 Directory.CreateDirectory(uploadsDir);
 NutriPlan.Services.AppPaths.UploadsDir = uploadsDir;
+NutriPlan.Services.AppPaths.DataDir = dataDir;
+NutriPlan.Services.AppPaths.IsAzure = isAzure;
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? $"Data Source={Path.Combine(dataDir, "nutriplan.db")}";
+NutriPlan.Services.AppPaths.ConnectionString = connectionString;
 
 builder.Services.AddDbContextFactory<NutriPlanContext>(options =>
     options.UseSqlite(connectionString));
@@ -36,6 +39,7 @@ builder.Services.AddScoped<DiarySessionService>();
 builder.Services.AddScoped<DiaryService>();
 builder.Services.AddScoped<NutriPlan.Services.StravaService>();
 builder.Services.AddScoped<NutritionistService>();
+builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<BrowserTimeService>();
 
@@ -182,9 +186,22 @@ using (var scope = app.Services.CreateScope())
             CONSTRAINT "FK_DayComments_DailyLogs_DailyLogId" FOREIGN KEY ("DailyLogId") REFERENCES "DailyLogs" ("Id") ON DELETE CASCADE);
         """);
     ctx.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_DayComments_DailyLogId\" ON \"DayComments\" (\"DailyLogId\");");
+    // Comptes administrateurs : table absente des bases créées avant son introduction.
+    ctx.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "Admins" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_Admins" PRIMARY KEY AUTOINCREMENT,
+            "Email" TEXT NOT NULL,
+            "Name" TEXT NOT NULL,
+            "PasswordHash" TEXT NOT NULL,
+            "CreatedAt" TEXT NOT NULL,
+            "LastLoginAt" TEXT NULL);
+        """);
+    ctx.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Admins_Email\" ON \"Admins\" (\"Email\");");
+
     // Colonnes ajoutées après l'introduction des tables ci-dessus.
     foreach (var lateCol in new[] { "DayComments|PatientReaction TEXT", "FoodDiaries|TargetWeightKg REAL",
-                                    "DayEvents|AvgHeartRate INTEGER", "DayEvents|MaxHeartRate INTEGER", "DayEvents|SufferScore REAL" })
+                                    "DayEvents|AvgHeartRate INTEGER", "DayEvents|MaxHeartRate INTEGER", "DayEvents|SufferScore REAL",
+                                    "Nutritionists|IsSuspended INTEGER NOT NULL DEFAULT 0" })
     {
         var parts = lateCol.Split('|');
         try { ctx.Database.ExecuteSqlRaw($"ALTER TABLE {parts[0]} ADD COLUMN {parts[1]};"); }

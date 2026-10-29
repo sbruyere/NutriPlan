@@ -1,0 +1,70 @@
+@page "/admin/connexion"
+@inject AdminService AdminSvc
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+
+<PageTitle>Administration — Connexion</PageTitle>
+
+<div class="max-w-md mx-auto py-8">
+    <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-6">
+        <div class="text-center mb-6">
+            <div class="w-12 h-12 rounded-xl bg-carbon flex items-center justify-center mx-auto mb-3 shadow-[0_12px_20px_-12px_rgba(8,12,16,.6)]">
+                <Icon Name="lock" Class="w-6 h-6 text-volt" />
+            </div>
+            <p class="text-[10px] font-extrabold uppercase tracking-[.14em] text-gray-400">Administration</p>
+            <h1 class="font-display text-2xl font-extrabold text-carbon mt-1">Connexion</h1>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="adml-email" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Email</label>
+                <input id="adml-email" @bind="email" type="email" placeholder="admin@exemple.fr"
+                       class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+            </div>
+            <div>
+                <label for="adml-pwd" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Mot de passe</label>
+                <input id="adml-pwd" @bind="password" @onkeyup="OnKeyUp" type="password" placeholder="••••••••••"
+                       class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-lg px-4 py-3">@error</div>
+            }
+
+            <button @onclick="DoLogin" disabled="@isLoading"
+                    class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-lg font-display font-extrabold text-sm shadow-[0_2px_0_rgba(14,17,20,.18)] transition-colors">
+                @(isLoading ? "Connexion…" : "Se connecter")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    string email = "", password = "", error = "";
+    bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        if (Session.IsAdminLoggedIn) { Nav.NavigateTo("/admin"); return; }
+        if (!await AdminSvc.HasAdminAsync())
+            Nav.NavigateTo("/admin/installation");
+    }
+
+    async Task DoLogin()
+    {
+        error = "";
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        { error = "Veuillez remplir tous les champs."; return; }
+        isLoading = true;
+        var admin = await AdminSvc.AuthenticateAsync(email, password);
+        isLoading = false;
+        if (admin == null)
+        { error = "Identifiants incorrects — ou compte temporairement verrouillé après plusieurs échecs."; return; }
+        await Session.LoginAdminAsync(admin.Id, admin.Name);
+        Nav.NavigateTo("/admin");
+    }
+
+    async Task OnKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await DoLogin(); }
+}

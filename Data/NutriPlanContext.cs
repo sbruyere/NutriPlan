@@ -15,6 +15,7 @@ public class NutriPlanContext(DbContextOptions<NutriPlanContext> options) : DbCo
     public DbSet<CatalogFood> CatalogFoods => Set<CatalogFood>();
     public DbSet<WeightEntry> WeightEntries => Set<WeightEntry>();
     public DbSet<DayComment> DayComments => Set<DayComment>();
+    public DbSet<Admin> Admins => Set<Admin>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,6 +23,7 @@ public class NutriPlanContext(DbContextOptions<NutriPlanContext> options) : DbCo
         modelBuilder.Entity<CatalogFood>().HasIndex(c => c.SearchName);
         modelBuilder.Entity<DailyLog>().HasIndex(l => new { l.FoodDiaryId, l.Date }).IsUnique();
         modelBuilder.Entity<Nutritionist>().HasIndex(n => n.Email).IsUnique();
+        modelBuilder.Entity<Admin>().HasIndex(a => a.Email).IsUnique();
 
         modelBuilder.Entity<DayEvent>()
             .HasMany(e => e.FoodEntries)

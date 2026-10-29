@@ -11,7 +11,7 @@ public class NutritionistService(IDbContextFactory<NutriPlanContext> factory)
         await using var ctx = await factory.CreateDbContextAsync();
         var nutritionist = await ctx.Nutritionists
             .FirstOrDefaultAsync(n => n.Email == email.ToLowerInvariant());
-        if (nutritionist == null) return null;
+        if (nutritionist == null || nutritionist.IsSuspended) return null; // compte suspendu par l'administration
         return BCrypt.Net.BCrypt.Verify(password, nutritionist.PasswordHash) ? nutritionist : null;
     }
 

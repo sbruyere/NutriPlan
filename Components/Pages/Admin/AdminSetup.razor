@@ -1,0 +1,82 @@
+@page "/admin/installation"
+@inject AdminService AdminSvc
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+
+<PageTitle>Configuration initiale — NutriPlan</PageTitle>
+
+<div class="max-w-md mx-auto py-8">
+    <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-6">
+        <div class="text-center mb-6">
+            <div class="w-12 h-12 rounded-xl bg-carbon flex items-center justify-center mx-auto mb-3 shadow-[0_12px_20px_-12px_rgba(8,12,16,.6)]">
+                <Icon Name="lock" Class="w-6 h-6 text-volt" />
+            </div>
+            <p class="text-[10px] font-extrabold uppercase tracking-[.14em] text-gray-400">Administration</p>
+            <h1 class="font-display text-2xl font-extrabold text-carbon mt-1">Configuration initiale</h1>
+            <p class="text-gray-400 text-sm mt-1 leading-relaxed">
+                Aucun administrateur n'existe encore : créez le compte maître de la plateforme.
+                Cet écran se verrouille définitivement ensuite.
+            </p>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="adm-name" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Nom</label>
+                <input id="adm-name" @bind="name" type="text" placeholder="Votre nom"
+                       class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+            </div>
+            <div>
+                <label for="adm-email" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Email</label>
+                <input id="adm-email" @bind="email" type="email" placeholder="admin@exemple.fr"
+                       class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+            </div>
+            <div>
+                <label for="adm-pwd" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Mot de passe</label>
+                <input id="adm-pwd" @bind="password" type="password" placeholder="Minimum 10 caractères"
+                       class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+            </div>
+            <div>
+                <label for="adm-pwd2" class="block text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-400 mb-1.5">Confirmer le mot de passe</label>
+                <input id="adm-pwd2" @bind="passwordConfirm" @onkeyup="OnKeyUp" type="password" placeholder="••••••••••"
+                       class="w-full bg-slate-50 border-0 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div role="alert" class="bg-red-50 text-red-600 text-sm rounded-lg px-4 py-3">@error</div>
+            }
+
+            <button @onclick="Create" disabled="@isLoading"
+                    class="w-full bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon py-3 rounded-lg font-display font-extrabold text-sm shadow-[0_2px_0_rgba(14,17,20,.18)] transition-colors">
+                @(isLoading ? "Création…" : "Créer le compte administrateur")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    string name = "", email = "", password = "", passwordConfirm = "", error = "";
+    bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        if (await AdminSvc.HasAdminAsync())
+            Nav.NavigateTo("/admin/connexion");
+    }
+
+    async Task Create()
+    {
+        error = "";
+        if (password != passwordConfirm) { error = "Les mots de passe ne correspondent pas."; return; }
+        isLoading = true;
+        var (success, err) = await AdminSvc.CreateInitialAdminAsync(name, email, password);
+        isLoading = false;
+        if (!success) { error = err!; return; }
+        var admin = await AdminSvc.AuthenticateAsync(email, password);
+        if (admin != null) await Session.LoginAdminAsync(admin.Id, admin.Name);
+        Nav.NavigateTo("/admin");
+    }
+
+    async Task OnKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await Create(); }
+}

@@ -18,9 +18,14 @@ public class DiarySessionService(ProtectedLocalStorage storage)
     private readonly Dictionary<string, string> _unlockedCodes = []; // code → empreinte du PIN au déverrouillage
     private int? _nutritionistId;
     private string? _nutritionistName;
+    private int? _adminId;
+    private string? _adminName;
     private Task? _loadTask;
 
-    private sealed record SessionState(Dictionary<string, string> UnlockedCodes, int? NutritionistId, string? NutritionistName);
+    // Les champs admin sont absents des sessions persistées avant leur ajout :
+    // la désérialisation les laisse simplement à null.
+    private sealed record SessionState(Dictionary<string, string> UnlockedCodes, int? NutritionistId, string? NutritionistName,
+        int? AdminId = null, string? AdminName = null);
 
     /// <summary>Empreinte de version du PIN : change dès que le PIN est défini, modifié ou supprimé.</summary>
     public static string PinStamp(string? pinHash) =>
@@ -51,6 +56,8 @@ public class DiarySessionService(ProtectedLocalStorage storage)
                 foreach (var kv in state.UnlockedCodes) _unlockedCodes[kv.Key] = kv.Value;
                 _nutritionistId = state.NutritionistId;
                 _nutritionistName = state.NutritionistName;
+                _adminId = state.AdminId;
+                _adminName = state.AdminName;
             }
         }
         catch
@@ -63,7 +70,7 @@ public class DiarySessionService(ProtectedLocalStorage storage)
     {
         try
         {
-            await storage.SetAsync(StorageKey, new SessionState(new Dictionary<string, string>(_unlockedCodes), _nutritionistId, _nutritionistName));
+            await storage.SetAsync(StorageKey, new SessionState(new Dictionary<string, string>(_unlockedCodes), _nutritionistId, _nutritionistName, _adminId, _adminName));
         }
         catch
         {
@@ -98,6 +105,27 @@ public class DiarySessionService(ProtectedLocalStorage storage)
     {
         _nutritionistId = null;
         _nutritionistName = null;
+        await PersistAsync();
+        NotifyStateChanged();
+    }
+
+    // ── Session administrateur ───────────────────────────────────────────────
+    public bool IsAdminLoggedIn => _adminId.HasValue;
+    public int? AdminId => _adminId;
+    public string? AdminName => _adminName;
+
+    public async Task LoginAdminAsync(int id, string name)
+    {
+        _adminId = id;
+        _adminName = name;
+        await PersistAsync();
+        NotifyStateChanged();
+    }
+
+    public async Task LogoutAdminAsync()
+    {
+        _adminId = null;
+        _adminName = null;
         await PersistAsync();
         NotifyStateChanged();
     }

@@ -1,0 +1,373 @@
+@page "/admin"
+@inject AdminService AdminSvc
+@inject DiarySessionService Session
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+<PageTitle>Administration — NutriPlan</PageTitle>
+
+@if (!ready)
+{
+    <div class="text-center text-gray-400 py-12">Chargement…</div>
+}
+else
+{
+    <div class="space-y-5">
+        <!-- En-tête -->
+        <div class="flex items-end justify-between gap-3 flex-wrap">
+            <div class="min-w-0">
+                <p class="text-[10px] font-extrabold uppercase tracking-[.14em] text-gray-400">Administration</p>
+                <h1 class="font-display text-2xl font-extrabold text-carbon tracking-tight mt-0.5">Plateforme NutriPlan</h1>
+                <p class="text-gray-400 text-sm mt-0.5">Connecté : @Session.AdminName</p>
+            </div>
+            <button @onclick="Logout"
+                    class="flex-shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">
+                Déconnexion
+            </button>
+        </div>
+
+        <!-- Onglets -->
+        <div class="inline-flex bg-[#eff3f6] rounded-lg p-0.5" role="tablist" aria-label="Sections de l'administration">
+            @foreach (var t in new[] { "Vue d'ensemble", "Nutritionnistes", "Carnets", "Système" })
+            {
+                var tabName = t;
+                <button role="tab" aria-selected="@(tab == tabName ? "true" : "false")"
+                        @onclick="async () => await SelectTab(tabName)"
+                        class="text-xs font-bold px-3.5 py-1.5 rounded-[6px] transition-colors @(tab == tabName ? "bg-white text-carbon shadow-sm" : "text-gray-500 hover:text-gray-700")">
+                    @tabName
+                </button>
+            }
+        </div>
+
+        @if (tab == "Vue d'ensemble" && overview is { } o)
+        {
+            <div class="bg-carbon rounded-xl p-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
+                <div class="flex items-center gap-1.5 mb-3">
+                    <span class="w-1.5 h-1.5 bg-volt" aria-hidden="true"></span>
+                    <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">Utilisateurs & carnets</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-4">
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.Nutritionists</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Nutritionnistes@(o.SuspendedNutritionists > 0 ? $" · {o.SuspendedNutritionists} susp." : "")</p></div>
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.Diaries</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Carnets · @o.ManagedDiaries suivis</p></div>
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.ActiveDiaries7d</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Actifs sur 7 jours</p></div>
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.DiariesWithStrava<span class="text-[11px] text-snow"> / @o.DiariesWithPin</span></p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Strava / PIN</p></div>
+                </div>
+            </div>
+
+            <div class="bg-carbon rounded-xl p-4 shadow-[0_14px_24px_-14px_rgba(8,12,16,.55)]">
+                <div class="flex items-center gap-1.5 mb-3">
+                    <span class="w-1.5 h-1.5 bg-volt" aria-hidden="true"></span>
+                    <span class="text-[9px] font-extrabold tracking-[.18em] uppercase text-[#7e8890]">Contenu</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-4">
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.DailyLogs</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Journées saisies</p></div>
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.Meals</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Repas · @o.Activities activités</p></div>
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.Photos</p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Photos · @FmtBytes(o.UploadsSizeBytes)</p></div>
+                    <div><p class="font-display text-xl font-extrabold text-volt leading-none tabular-nums">@o.WeightEntries<span class="text-[11px] text-snow"> / @o.DayComments</span></p>
+                        <p class="text-[8.5px] uppercase tracking-[.14em] text-[#79838c] font-bold mt-1.5">Pesées / commentaires</p></div>
+                </div>
+            </div>
+
+            <p class="text-[11px] text-gray-400">
+                Catalogue : @o.CatalogCiqual aliments Ciqual + @o.CatalogUsda USDA · Base @FmtBytes(o.DbSizeBytes) ·
+                @o.BackupCount sauvegarde@(o.BackupCount > 1 ? "s" : "")@(o.LastBackupUtc is { } lb ? $", dernière le {lb.ToLocalTime():d MMM HH:mm}" : "") ·
+                Environnement @(o.IsAzure ? "Azure" : "local") · Strava @(o.StravaConfigured ? "configuré" : "non configuré")
+            </p>
+        }
+
+        @if (tab == "Nutritionnistes")
+        {
+            @if (tempPassword != null)
+            {
+                <div class="bg-carbon rounded-xl p-4">
+                    <p class="text-[9px] font-extrabold uppercase tracking-[.14em] text-[#79838c]">Mot de passe temporaire — affiché une seule fois</p>
+                    <p class="font-display text-xl font-extrabold text-volt tracking-[.1em] mt-1 select-all">@tempPassword</p>
+                    <button @onclick="() => tempPassword = null" class="text-[11px] text-[#79838c] hover:text-snow mt-2 underline">J'ai transmis, masquer</button>
+                </div>
+            }
+            <div class="rounded-xl border border-[#e5eaef] bg-white shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] divide-y divide-[#f0f3f6] overflow-hidden">
+                @if (nutritionists.Count == 0)
+                {
+                    <p class="px-4 py-6 text-sm text-gray-400 text-center">Aucun compte nutritionniste.</p>
+                }
+                @foreach (var n in nutritionists)
+                {
+                    var row = n;
+                    <div class="px-4 py-3 flex items-center gap-3 flex-wrap">
+                        <div class="min-w-0 flex-1">
+                            <p class="font-display text-[13px] font-extrabold text-carbon truncate">
+                                @row.Name
+                                @if (row.IsSuspended)
+                                { <span class="ml-1 bg-red-50 text-red-600 px-1.5 py-0.5 rounded-[4px] text-[9px] font-extrabold uppercase tracking-[.08em]">Suspendu</span> }
+                            </p>
+                            <p class="text-[11px] text-gray-400 truncate">@row.Email · inscrit le @row.CreatedAt.ToLocalTime().ToString("d MMM yyyy", Fr)</p>
+                        </div>
+                        <div class="text-[11px] text-gray-500 tabular-nums flex-shrink-0 text-right">
+                            <p><b class="text-carbon">@row.DiaryCount</b> carnet@(row.DiaryCount > 1 ? "s" : "")</p>
+                            <p class="text-gray-400">@(row.LastActivity is { } la ? $"actif le {la.ToString("d MMM", Fr)}" : "aucune saisie")</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-shrink-0">
+                            <button @onclick="async () => await ToggleSuspend(row)"
+                                    class="h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">
+                                @(row.IsSuspended ? "Réactiver" : "Suspendre")
+                            </button>
+                            <button @onclick="async () => await ResetPassword(row)"
+                                    class="h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">
+                                Réinit. mdp
+                            </button>
+                            @if (confirmDeleteNutri == row.Id)
+                            {
+                                <button @onclick="async () => await DeleteNutritionist(row)"
+                                        class="h-7 px-2.5 rounded-lg text-[11px] font-bold bg-red-500 hover:bg-red-600 text-snow transition-colors">Confirmer</button>
+                                <button @onclick="() => confirmDeleteNutri = null"
+                                        class="h-7 px-2 rounded-lg text-[11px] text-gray-500 hover:bg-slate-50">Annuler</button>
+                            }
+                            else
+                            {
+                                <button @onclick="() => confirmDeleteNutri = row.Id" title="Supprimer le compte (ses carnets sont conservés et détachés)"
+                                        class="h-7 w-7 rounded-lg border border-[#dfe5ea] bg-white text-gray-400 hover:text-red-500 transition-colors flex items-center justify-center">
+                                    <Icon Name="trash-2" Class="w-3.5 h-3.5" />
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <p class="text-[10px] text-gray-400">Supprimer un compte conserve ses carnets : ils deviennent autonomes (accès par code inchangé).</p>
+        }
+
+        @if (tab == "Carnets")
+        {
+            <div class="flex items-center gap-2">
+                <input @bind="diarySearch" @bind:event="oninput" @bind:after="ReloadDiaries" type="text"
+                       placeholder="Rechercher par code ou alias…"
+                       class="flex-1 max-w-xs bg-white border border-[#dfe5ea] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400 shadow-[0_1px_2px_rgba(20,26,31,.04)]" />
+                <span class="text-[11px] text-gray-400">@diaries.Count carnet@(diaries.Count > 1 ? "s" : "")</span>
+            </div>
+            <div class="rounded-xl border border-[#e5eaef] bg-white shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] divide-y divide-[#f0f3f6] overflow-hidden">
+                @if (diaries.Count == 0)
+                {
+                    <p class="px-4 py-6 text-sm text-gray-400 text-center">Aucun carnet trouvé.</p>
+                }
+                @foreach (var d in diaries)
+                {
+                    var row = d;
+                    <div class="px-4 py-3 flex items-center gap-3 flex-wrap">
+                        <div class="min-w-0 flex-1">
+                            <p class="font-mono text-[13px] font-bold text-carbon tracking-wider">
+                                @row.AccessCode
+                                @if (row.HasPin) { <span class="ml-1 bg-carbon text-volt px-1.5 py-0.5 rounded-[4px] text-[8px] font-extrabold uppercase tracking-[.1em]">PIN</span> }
+                                @if (row.HasStrava) { <span class="ml-1 bg-[#fc4c02] text-snow px-1.5 py-0.5 rounded-[4px] text-[8px] font-extrabold uppercase tracking-[.1em]">Strava</span> }
+                            </p>
+                            <p class="text-[11px] text-gray-400 truncate">
+                                @(row.PatientAlias ?? (row.NutritionistName != null ? "Sans alias" : "Carnet autonome"))@(row.NutritionistName != null ? $" · suivi par {row.NutritionistName}" : "") ·
+                                créé le @row.CreatedAt.ToLocalTime().ToString("d MMM yyyy", Fr)
+                            </p>
+                        </div>
+                        <div class="text-[11px] text-gray-500 tabular-nums flex-shrink-0 text-right">
+                            <p><b class="text-carbon">@row.DayCount</b> jour@(row.DayCount > 1 ? "s" : "")</p>
+                            <p class="text-gray-400">@(row.LastActivity is { } la ? $"actif le {la.ToString("d MMM", Fr)}" : "vide")</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-shrink-0">
+                            @if (row.HasPin)
+                            {
+                                <button @onclick="async () => await RemovePin(row)" title="Retirer le PIN (dépannage patient)"
+                                        class="h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">PIN ×</button>
+                            }
+                            @if (row.HasStrava)
+                            {
+                                <button @onclick="async () => await DisconnectStrava(row)" title="Délier le compte Strava"
+                                        class="h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">Strava ×</button>
+                            }
+                            @if (row.NutritionistName != null)
+                            {
+                                <button @onclick="async () => await DetachDiary(row)" title="Détacher du nutritionniste"
+                                        class="h-7 px-2.5 rounded-lg text-[11px] font-semibold border border-[#dfe5ea] bg-white shadow-[0_1px_2px_rgba(20,26,31,.04)] text-[#4a545e] hover:bg-[#f7f9fb] transition-colors">Détacher</button>
+                            }
+                            @if (confirmDeleteDiary == row.Id)
+                            {
+                                <button @onclick="async () => await DeleteDiary(row)"
+                                        class="h-7 px-2.5 rounded-lg text-[11px] font-bold bg-red-500 hover:bg-red-600 text-snow transition-colors">Supprimer définitivement</button>
+                                <button @onclick="() => confirmDeleteDiary = null"
+                                        class="h-7 px-2 rounded-lg text-[11px] text-gray-500 hover:bg-slate-50">Annuler</button>
+                            }
+                            else
+                            {
+                                <button @onclick="() => confirmDeleteDiary = row.Id" title="Supprimer le carnet et toutes ses données"
+                                        class="h-7 w-7 rounded-lg border border-[#dfe5ea] bg-white text-gray-400 hover:text-red-500 transition-colors flex items-center justify-center">
+                                    <Icon Name="trash-2" Class="w-3.5 h-3.5" />
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <p class="text-[10px] text-gray-400">
+                Le contenu santé des carnets (repas, photos, ressentis) n'est pas consultable depuis l'administration — elle gère, elle ne consulte pas.
+            </p>
+        }
+
+        @if (tab == "Système" && overview is { } sys)
+        {
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                    <h3 class="font-display text-[13px] font-extrabold text-carbon mb-2">Base de données</h3>
+                    <p class="text-[13px] text-gray-600">SQLite · <b>@FmtBytes(sys.DbSizeBytes)</b> · environnement @(sys.IsAzure ? "Azure (stockage persistant)" : "local")</p>
+                    <p class="text-[12px] text-gray-500 mt-1.5">
+                        @sys.BackupCount sauvegarde@(sys.BackupCount > 1 ? "s" : "") conservée@(sys.BackupCount > 1 ? "s" : "")@(sys.LastBackupUtc is { } lb2 ? $" — dernière le {lb2.ToLocalTime():d MMM yyyy à HH:mm}" : "")
+                    </p>
+                    <button @onclick="BackupNow" disabled="@backupRunning"
+                            class="mt-3 bg-volt hover:bg-volt-dark disabled:opacity-60 text-carbon px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] shadow-[0_2px_0_rgba(14,17,20,.18)] transition-colors">
+                        @(backupRunning ? "Sauvegarde…" : "Sauvegarder maintenant")
+                    </button>
+                </div>
+                <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
+                    <h3 class="font-display text-[13px] font-extrabold text-carbon mb-2">Stockage & intégrations</h3>
+                    <p class="text-[13px] text-gray-600">Photos : <b>@sys.UploadsCount</b> fichier@(sys.UploadsCount > 1 ? "s" : "") · @FmtBytes(sys.UploadsSizeBytes)</p>
+                    <p class="text-[13px] text-gray-600 mt-1">Catalogue : <b>@(sys.CatalogCiqual + sys.CatalogUsda)</b> aliments (@sys.CatalogCiqual Ciqual + @sys.CatalogUsda USDA)</p>
+                    <p class="text-[13px] text-gray-600 mt-1">Strava : <b>@(sys.StravaConfigured ? "configuré" : "non configuré")</b> · @sys.DiariesWithStrava carnet@(sys.DiariesWithStrava > 1 ? "s" : "") lié@(sys.DiariesWithStrava > 1 ? "s" : "")</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4 max-w-md">
+                <h3 class="font-display text-[13px] font-extrabold text-carbon mb-2">Changer mon mot de passe</h3>
+                <div class="space-y-2.5">
+                    <input @bind="pwdCurrent" type="password" placeholder="Mot de passe actuel"
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+                    <input @bind="pwdNew" type="password" placeholder="Nouveau mot de passe (10 caractères min.)"
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+                    <button @onclick="ChangePassword"
+                            class="bg-carbon hover:bg-carbon-2 text-snow px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] transition-colors">
+                        Mettre à jour
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
+
+    static string FmtBytes(long bytes) => bytes switch
+    {
+        >= 1_073_741_824 => $"{bytes / 1_073_741_824.0:0.#} Go",
+        >= 1_048_576 => $"{bytes / 1_048_576.0:0.#} Mo",
+        >= 1024 => $"{bytes / 1024.0:0.#} Ko",
+        _ => $"{bytes} o",
+    };
+
+    bool ready;
+    string tab = "Vue d'ensemble";
+    AdminService.Overview? overview;
+    List<AdminService.NutritionistRow> nutritionists = [];
+    List<AdminService.DiaryRow> diaries = [];
+    string diarySearch = "";
+    string? tempPassword;
+    int? confirmDeleteNutri, confirmDeleteDiary;
+    bool backupRunning;
+    string pwdCurrent = "", pwdNew = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        if (!Session.IsAdminLoggedIn)
+        {
+            Nav.NavigateTo(await AdminSvc.HasAdminAsync() ? "/admin/connexion" : "/admin/installation");
+            return;
+        }
+        overview = await AdminSvc.GetOverviewAsync();
+        ready = true;
+    }
+
+    async Task SelectTab(string t)
+    {
+        tab = t;
+        confirmDeleteNutri = confirmDeleteDiary = null;
+        if (t == "Nutritionnistes") nutritionists = await AdminSvc.GetNutritionistsAsync();
+        if (t == "Carnets") diaries = await AdminSvc.GetDiariesAsync(diarySearch);
+        if (t is "Vue d'ensemble" or "Système") overview = await AdminSvc.GetOverviewAsync();
+    }
+
+    async Task ReloadDiaries() => diaries = await AdminSvc.GetDiariesAsync(diarySearch);
+
+    async Task ToggleSuspend(AdminService.NutritionistRow n)
+    {
+        await AdminSvc.SetNutritionistSuspendedAsync(n.Id, !n.IsSuspended);
+        Toast.ShowSuccess(n.IsSuspended ? $"{n.Name} réactivé" : $"{n.Name} suspendu — connexion refusée");
+        nutritionists = await AdminSvc.GetNutritionistsAsync();
+    }
+
+    async Task ResetPassword(AdminService.NutritionistRow n)
+    {
+        tempPassword = await AdminSvc.ResetNutritionistPasswordAsync(n.Id);
+        if (tempPassword != null) Toast.ShowSuccess($"Mot de passe de {n.Name} réinitialisé — transmettez-le maintenant");
+    }
+
+    async Task DeleteNutritionist(AdminService.NutritionistRow n)
+    {
+        await AdminSvc.DeleteNutritionistAsync(n.Id);
+        confirmDeleteNutri = null;
+        Toast.ShowSuccess($"Compte de {n.Name} supprimé — ses carnets sont détachés");
+        nutritionists = await AdminSvc.GetNutritionistsAsync();
+    }
+
+    async Task RemovePin(AdminService.DiaryRow d)
+    {
+        await AdminSvc.RemovePinAsync(d.Id);
+        Toast.ShowSuccess($"PIN retiré du carnet {d.AccessCode}");
+        await ReloadDiaries();
+    }
+
+    async Task DisconnectStrava(AdminService.DiaryRow d)
+    {
+        await AdminSvc.DisconnectStravaAsync(d.Id);
+        Toast.ShowSuccess($"Strava délié du carnet {d.AccessCode}");
+        await ReloadDiaries();
+    }
+
+    async Task DetachDiary(AdminService.DiaryRow d)
+    {
+        await AdminSvc.DetachDiaryAsync(d.Id);
+        Toast.ShowSuccess($"Carnet {d.AccessCode} détaché de son nutritionniste");
+        await ReloadDiaries();
+    }
+
+    async Task DeleteDiary(AdminService.DiaryRow d)
+    {
+        await AdminSvc.DeleteDiaryAsync(d.Id);
+        confirmDeleteDiary = null;
+        Toast.ShowSuccess($"Carnet {d.AccessCode} supprimé définitivement");
+        await ReloadDiaries();
+        overview = null;
+    }
+
+    async Task BackupNow()
+    {
+        backupRunning = true;
+        var (success, message) = await AdminSvc.BackupNowAsync();
+        backupRunning = false;
+        if (success) Toast.ShowSuccess(message); else Toast.ShowError(message);
+        overview = await AdminSvc.GetOverviewAsync();
+    }
+
+    async Task ChangePassword()
+    {
+        var (success, error) = await AdminSvc.ChangePasswordAsync(Session.AdminId!.Value, pwdCurrent, pwdNew);
+        if (success) { Toast.ShowSuccess("Mot de passe administrateur mis à jour"); pwdCurrent = pwdNew = ""; }
+        else Toast.ShowError(error!);
+    }
+
+    async Task Logout()
+    {
+        await Session.LogoutAdminAsync();
+        Nav.NavigateTo("/admin/connexion");
+    }
+}

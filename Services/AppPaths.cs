@@ -7,4 +7,7 @@ namespace NutriPlan.Services;
 public static class AppPaths
 {
     public static string UploadsDir { get; set; } = "";
+    public static string DataDir { get; set; } = "";
+    public static string ConnectionString { get; set; } = "";
+    public static bool IsAzure { get; set; }
 }
