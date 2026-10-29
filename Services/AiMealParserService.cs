@@ -1,14 +1,16 @@
 using System.Text;
 using System.Text.Json;
+using NutriPlan.Data.Models;
 
 namespace NutriPlan.Services;
 
 // Analyse de phrase par IA (optionnelle) pour la saisie express.
-// Le fournisseur (OpenAI, Azure OpenAI ou Claude API) et sa clé sont configurés
-// dans le backend admin ; sans configuration — ou au moindre échec — l'appelant
-// replie sur l'analyse locale MealPhraseParser (gratuite, instantanée).
+// Les clés (Claude API, OpenAI, Azure OpenAI, OpenRouter) vivent dans le
+// trousseau AiProfileService : seul le profil ACTIF est utilisé ; sans profil
+// actif — ou au moindre échec — l'appelant replie sur l'analyse locale
+// MealPhraseParser (gratuite, instantanée).
 // L'IA ne reçoit que la phrase du repas : jamais d'identité ni d'historique.
-public class AiMealParserService(SettingsService settings, IHttpClientFactory httpFactory)
+public class AiMealParserService(AiProfileService profiles, IHttpClientFactory httpFactory)
 {
     const string SystemPrompt =
         """
@@ -39,23 +41,16 @@ public class AiMealParserService(SettingsService settings, IHttpClientFactory ht
         NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString,
     };
 
-    public async Task<bool> IsConfiguredAsync()
-    {
-        var (provider, apiKey, model, endpoint) = await settings.GetAiConfigAsync();
-        return provider switch
-        {
-            "openai" or "anthropic" or "openrouter" => apiKey != "" && model != "",
-            "azure" => apiKey != "" && model != "" && endpoint != "",
-            _ => false,
-        };
-    }
+    public async Task<bool> IsConfiguredAsync() =>
+        await profiles.GetActiveAsync() is { } p && AiProfileService.IsComplete(p);
 
-    /// <summary>Analyse par le fournisseur configuré ; null si non configuré ou en échec (→ repli local).</summary>
+    /// <summary>Analyse par le profil actif du trousseau ; null si aucun profil actif ou en échec (→ repli local).</summary>
     public async Task<MealPhraseParser.ParsedMeal?> ParseAsync(string phrase)
     {
         try
         {
-            var raw = await CallProviderAsync(phrase);
+            if (await profiles.GetActiveAsync() is not { } p || !AiProfileService.IsComplete(p)) return null;
+            var raw = await CallAsync(p, phrase);
             return raw == null ? null : MapToParsedMeal(raw);
         }
         catch
@@ -64,13 +59,14 @@ public class AiMealParserService(SettingsService settings, IHttpClientFactory ht
         }
     }
 
-    /// <summary>Appel de vérification pour le backend admin (phrase d'exemple fixe).</summary>
-    public async Task<(bool Ok, string Message)> TestAsync()
+    /// <summary>Vérification d'un profil du trousseau (backend admin), actif ou non.</summary>
+    public async Task<(bool Ok, string Message)> TestProfileAsync(AiProfile profile)
     {
-        if (!await IsConfiguredAsync()) return (false, "Configuration incomplète (fournisseur, clé, modèle…).");
+        if (!AiProfileService.IsComplete(profile)) return (false, "Configuration incomplète (fournisseur, clé, modèle…).");
         try
         {
-            var meal = await ParseAsync("À midi j'ai mangé 100 g de riz complet et deux œufs bio");
+            var raw = await CallAsync(profile, "À midi j'ai mangé 100 g de riz complet et deux œufs bio");
+            var meal = raw == null ? null : MapToParsedMeal(raw);
             if (meal == null || meal.Items.Count == 0)
                 return (false, "Le fournisseur a répondu mais sans extraction exploitable.");
             var names = string.Join(", ", meal.Items.Select(i => i.Query));
@@ -82,9 +78,9 @@ public class AiMealParserService(SettingsService settings, IHttpClientFactory ht
         }
     }
 
-    async Task<string?> CallProviderAsync(string phrase)
+    async Task<string?> CallAsync(AiProfile profile, string phrase)
     {
-        var (provider, apiKey, model, endpoint) = await settings.GetAiConfigAsync();
+        var (provider, apiKey, model, endpoint) = (profile.Provider, profile.ApiKey, profile.Model, profile.Endpoint);
         var http = httpFactory.CreateClient("ai");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 

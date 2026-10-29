@@ -3,7 +3,7 @@
 @inject DiarySessionService Session
 @inject NavigationManager Nav
 @inject ToastService Toast
-@inject SettingsService Settings
+@inject AiProfileService Profiles
 @inject AiMealParserService AiParser
 
 <PageTitle>Administration — NutriPlan</PageTitle>
@@ -241,47 +241,100 @@ else
             <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4">
                 <h3 class="font-display text-[13px] font-extrabold text-carbon">Agent IA de saisie express</h3>
                 <p class="text-[11px] text-gray-400 mt-1 leading-relaxed">
-                    Optionnel. Sans configuration, l'analyse des phrases est faite localement (gratuite).
-                    Avec un fournisseur configuré, l'IA prend le relais pour les phrases complexes —
-                    seule la phrase du repas lui est transmise, jamais l'identité du patient.
+                    Enregistrez plusieurs clés d'API et activez celle de votre choix — une seule sert à la fois.
+                    Révoquer une clé la supprime définitivement. Seule la phrase du repas est transmise au
+                    fournisseur actif, jamais l'identité du patient.
                 </p>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
-                    <select @bind="aiProvider" aria-label="Fournisseur IA"
+
+                <div class="mt-3 rounded-lg border border-[#e5eaef] divide-y divide-[#f0f3f6]">
+                    <div class="px-3 py-2 flex items-center gap-2">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-gray-800">Analyse locale</p>
+                            <p class="text-[10px] text-gray-400 mt-0.5">Sans IA — gratuite, instantanée, hors-ligne</p>
+                        </div>
+                        @if (aiActiveId == null)
+                        {
+                            <span class="h-6 inline-flex items-center px-2 rounded-[4px] bg-carbon text-volt text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0">Actif</span>
+                        }
+                        else
+                        {
+                            <button @onclick="() => ActivateProfile(null)"
+                                    class="h-7 px-2.5 rounded-full border border-[#dfe5ea] bg-white text-[10px] font-bold text-gray-500 hover:border-gray-300 transition-colors flex-shrink-0">
+                                Activer
+                            </button>
+                        }
+                    </div>
+                    @foreach (var profile in aiProfiles)
+                    {
+                        var p = profile;
+                        <div class="px-3 py-2 flex items-center gap-2 flex-wrap">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm text-gray-800"><b class="font-semibold">@ProviderLabel(p.Provider)</b> · @p.Model</p>
+                                <p class="text-[10px] text-gray-400 mt-0.5">Clé @MaskKey(p.ApiKey)@(p.Endpoint != "" ? $" · {p.Endpoint}" : "") · ajoutée le @p.CreatedAt.ToLocalTime().ToString("d MMM yyyy", Fr)</p>
+                            </div>
+                            @if (aiActiveId == p.Id)
+                            {
+                                <span class="h-6 inline-flex items-center px-2 rounded-[4px] bg-carbon text-volt text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0">Actif</span>
+                            }
+                            else
+                            {
+                                <button @onclick="() => ActivateProfile(p.Id)"
+                                        class="h-7 px-2.5 rounded-full border border-[#dfe5ea] bg-white text-[10px] font-bold text-gray-500 hover:border-gray-300 transition-colors flex-shrink-0">
+                                    Activer
+                                </button>
+                            }
+                            <button @onclick="() => TestProfile(p)" disabled="@aiTesting"
+                                    class="h-7 px-2.5 rounded-full border border-[#dfe5ea] bg-white text-[10px] font-bold text-gray-500 hover:border-gray-300 transition-colors disabled:opacity-50 flex-shrink-0">
+                                @(aiTesting && aiTestingId == p.Id ? "Test…" : "Tester")
+                            </button>
+                            @if (confirmRevokeId == p.Id)
+                            {
+                                <button @onclick="() => RevokeProfile(p.Id)"
+                                        class="h-7 px-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white text-[10px] font-extrabold transition-colors flex-shrink-0">
+                                    Confirmer la révocation
+                                </button>
+                            }
+                            else
+                            {
+                                <button @onclick="() => confirmRevokeId = p.Id" aria-label="Révoquer cette clé"
+                                        class="p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
+                                    <Icon Name="trash-2" Class="w-3.5 h-3.5" />
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+                @if (aiTestResult != null)
+                {
+                    <p class="text-[11px] leading-snug mt-2 @(aiTestOk ? "text-[#3d7a1f]" : "text-red-500")">@aiTestResult</p>
+                }
+
+                <p class="text-[9px] font-extrabold uppercase tracking-[.14em] text-gray-400 mt-4 mb-1.5">Ajouter une clé</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <select @bind="aiNewProvider" aria-label="Fournisseur IA"
                             class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
-                        <option value="">Aucun — analyse locale uniquement</option>
                         <option value="anthropic">Claude API (Anthropic)</option>
                         <option value="openai">OpenAI</option>
                         <option value="azure">Azure OpenAI</option>
                         <option value="openrouter">OpenRouter</option>
                     </select>
-                    <input @bind="aiModel" placeholder="@(aiProvider switch { "azure" => "Nom du déploiement", "openai" => "Modèle (ex. gpt-4o-mini)", "openrouter" => "Modèle (ex. anthropic/claude-haiku-5.5)", _ => "Modèle (ex. claude-haiku-5-5)" })"
-                           aria-label="Modèle" disabled="@(aiProvider == "")"
-                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400 disabled:opacity-50" />
-                    <input @bind="aiApiKey" type="password" autocomplete="off"
-                           placeholder="@(aiKeyConfigured ? "Clé d'API enregistrée — saisir pour remplacer" : "Clé d'API")"
-                           aria-label="Clé d'API" disabled="@(aiProvider == "")"
-                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400 disabled:opacity-50" />
-                    @if (aiProvider == "azure")
+                    <input @bind="aiNewModel" placeholder="@(aiNewProvider switch { "azure" => "Nom du déploiement", "openai" => "Modèle (ex. gpt-4o-mini)", "openrouter" => "Modèle (ex. anthropic/claude-haiku-5.5)", _ => "Modèle (ex. claude-haiku-5-5)" })"
+                           aria-label="Modèle"
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+                    <input @bind="aiNewKey" type="password" autocomplete="off" placeholder="Clé d'API"
+                           aria-label="Clé d'API"
+                           class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
+                    @if (aiNewProvider == "azure")
                     {
-                        <input @bind="aiEndpoint" placeholder="https://ma-ressource.openai.azure.com"
+                        <input @bind="aiNewEndpoint" placeholder="https://ma-ressource.openai.azure.com"
                                aria-label="Endpoint Azure"
                                class="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder-gray-400" />
                     }
                 </div>
-                <div class="flex items-center gap-2 mt-3">
-                    <button @onclick="SaveAiConfig"
-                            class="bg-carbon hover:bg-carbon-2 text-snow px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] transition-colors">
-                        Enregistrer
-                    </button>
-                    <button @onclick="TestAiConfig" disabled="@aiTesting"
-                            class="bg-white border border-[#dfe5ea] hover:border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] transition-colors disabled:opacity-50">
-                        @(aiTesting ? "Test…" : "Tester")
-                    </button>
-                    @if (aiTestResult != null)
-                    {
-                        <p class="text-[11px] leading-snug @(aiTestOk ? "text-[#3d7a1f]" : "text-red-500")">@aiTestResult</p>
-                    }
-                </div>
+                <button @onclick="AddAiProfile" disabled="@(!CanAddProfile)"
+                        class="mt-3 bg-carbon hover:bg-carbon-2 disabled:opacity-40 text-snow px-4 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-[.08em] transition-colors">
+                    Enregistrer et activer
+                </button>
             </div>
 
             <div class="bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.35)] p-4 max-w-md">
@@ -323,41 +376,69 @@ else
     bool backupRunning;
     string pwdCurrent = "", pwdNew = "";
 
-    // ── Agent IA (saisie express) ───────────────────────────────────────────
-    string aiProvider = "", aiModel = "", aiApiKey = "", aiEndpoint = "";
-    bool aiKeyConfigured, aiTesting, aiTestOk;
+    // ── Agent IA (saisie express) — trousseau de clés ───────────────────────
+    List<NutriPlan.Data.Models.AiProfile> aiProfiles = [];
+    int? aiActiveId;
+    string aiNewProvider = "anthropic", aiNewModel = "", aiNewKey = "", aiNewEndpoint = "";
+    int? confirmRevokeId, aiTestingId;
+    bool aiTesting, aiTestOk;
     string? aiTestResult;
+
+    static string ProviderLabel(string p) => p switch
+    {
+        "anthropic" => "Claude API", "openai" => "OpenAI",
+        "azure" => "Azure OpenAI", "openrouter" => "OpenRouter", _ => p,
+    };
+
+    static string MaskKey(string k) => k.Length > 4 ? $"••••{k[^4..]}" : "••••";
+
+    bool CanAddProfile =>
+        !string.IsNullOrWhiteSpace(aiNewModel) && !string.IsNullOrWhiteSpace(aiNewKey)
+        && (aiNewProvider != "azure" || !string.IsNullOrWhiteSpace(aiNewEndpoint));
 
     async Task LoadAiConfigAsync()
     {
-        var (provider, key, model, endpoint) = await Settings.GetAiConfigAsync();
-        aiProvider = provider; aiModel = model; aiEndpoint = endpoint;
-        aiKeyConfigured = key != "";
-        aiApiKey = ""; // la clé enregistrée n'est jamais réaffichée
+        aiProfiles = await Profiles.ListAsync();
+        aiActiveId = await Profiles.GetActiveIdAsync();
+        confirmRevokeId = null;
     }
 
-    async Task SaveAiConfig()
+    async Task AddAiProfile()
     {
-        await Settings.SetAsync(SettingsService.AiProviderKey, aiProvider);
-        await Settings.SetAsync(SettingsService.AiModelKey, aiModel.Trim());
-        await Settings.SetAsync(SettingsService.AiEndpointKey, aiEndpoint.Trim());
-        if (aiProvider == "")
-            await Settings.SetAsync(SettingsService.AiApiKeyKey, ""); // désactivation = clé purgée
-        else if (!string.IsNullOrWhiteSpace(aiApiKey))
-            await Settings.SetAsync(SettingsService.AiApiKeyKey, aiApiKey.Trim());
+        if (!CanAddProfile) return;
+        await Profiles.AddAsync(aiNewProvider, aiNewModel, aiNewProvider == "azure" ? aiNewEndpoint : "", aiNewKey);
+        aiNewModel = ""; aiNewKey = ""; aiNewEndpoint = "";
         aiTestResult = null;
         await LoadAiConfigAsync();
-        Toast.ShowSaved();
+        Toast.ShowSuccess("Clé enregistrée et activée ✓");
     }
 
-    async Task TestAiConfig()
+    async Task ActivateProfile(int? id)
     {
-        aiTesting = true; aiTestResult = null;
+        await Profiles.SetActiveAsync(id);
+        aiActiveId = id;
+        confirmRevokeId = null;
+        aiTestResult = null;
+        Toast.ShowSuccess(id == null ? "Analyse locale activée" : "Clé activée ✓");
+    }
+
+    async Task RevokeProfile(int id)
+    {
+        await Profiles.RevokeAsync(id);
+        await LoadAiConfigAsync();
+        aiTestResult = null;
+        Toast.ShowSuccess("Clé révoquée — supprimée de la base");
+    }
+
+    async Task TestProfile(NutriPlan.Data.Models.AiProfile profile)
+    {
+        aiTesting = true; aiTestingId = profile.Id; aiTestResult = null;
         try
         {
-            (aiTestOk, aiTestResult) = await AiParser.TestAsync();
+            (aiTestOk, aiTestResult) = await AiParser.TestProfileAsync(profile);
+            aiTestResult = $"{ProviderLabel(profile.Provider)} · {profile.Model} — {aiTestResult}";
         }
-        finally { aiTesting = false; }
+        finally { aiTesting = false; aiTestingId = null; }
     }
 
     protected override async Task OnInitializedAsync()

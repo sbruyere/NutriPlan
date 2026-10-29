@@ -17,6 +17,7 @@ public class NutriPlanContext(DbContextOptions<NutriPlanContext> options) : DbCo
     public DbSet<DayComment> DayComments => Set<DayComment>();
     public DbSet<Admin> Admins => Set<Admin>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<AiProfile> AiProfiles => Set<AiProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

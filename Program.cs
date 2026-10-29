@@ -41,6 +41,7 @@ builder.Services.AddScoped<NutriPlan.Services.StravaService>();
 builder.Services.AddScoped<NutritionistService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<SettingsService>();
+builder.Services.AddScoped<AiProfileService>();
 builder.Services.AddScoped<AiMealParserService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<BrowserTimeService>();
@@ -208,6 +209,44 @@ using (var scope = app.Services.CreateScope())
             "Key" TEXT NOT NULL CONSTRAINT "PK_AppSettings" PRIMARY KEY,
             "Value" TEXT NOT NULL);
         """);
+    // Trousseau de clés IA : plusieurs profils enregistrés, un seul actif.
+    ctx.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "AiProfiles" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_AiProfiles" PRIMARY KEY AUTOINCREMENT,
+            "Provider" TEXT NOT NULL,
+            "Model" TEXT NOT NULL,
+            "Endpoint" TEXT NOT NULL,
+            "ApiKey" TEXT NOT NULL,
+            "CreatedAt" TEXT NOT NULL);
+        """);
+    // Migration de l'ancienne configuration IA unique (ai.provider/apikey/…)
+    // vers le trousseau : un profil créé et activé, anciennes clés purgées.
+    if (!ctx.AiProfiles.Any())
+    {
+        var legacy = ctx.AppSettings.Where(s => s.Key.StartsWith("ai.")).ToDictionary(s => s.Key, s => s.Value);
+        if (legacy.GetValueOrDefault("ai.provider", "") is not "" and var legacyProvider
+            && legacy.GetValueOrDefault("ai.apikey", "") is not "" and var legacyKey
+            && legacy.GetValueOrDefault("ai.model", "") is not "" and var legacyModel)
+        {
+            var migrated = new NutriPlan.Data.Models.AiProfile
+            {
+                Provider = legacyProvider,
+                Model = legacyModel,
+                Endpoint = legacy.GetValueOrDefault("ai.endpoint", ""),
+                ApiKey = legacyKey,
+            };
+            ctx.AiProfiles.Add(migrated);
+            ctx.SaveChanges();
+            foreach (var (key, value) in new[] { ("ai.activeProfile", migrated.Id.ToString()),
+                                                 ("ai.provider", ""), ("ai.apikey", ""), ("ai.model", ""), ("ai.endpoint", "") })
+            {
+                var row = ctx.AppSettings.Find(key);
+                if (row == null) ctx.AppSettings.Add(new NutriPlan.Data.Models.AppSetting { Key = key, Value = value });
+                else row.Value = value;
+            }
+            ctx.SaveChanges();
+        }
+    }
 
     // Colonnes ajoutées après l'introduction des tables ci-dessus.
     foreach (var lateCol in new[] { "DayComments|PatientReaction TEXT", "FoodDiaries|TargetWeightKg REAL",

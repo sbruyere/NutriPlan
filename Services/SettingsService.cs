@@ -9,12 +9,6 @@ namespace NutriPlan.Services;
 // chaud de la saisie express, écrits uniquement depuis le backend admin.
 public class SettingsService(IDbContextFactory<NutriPlanContext> factory)
 {
-    // Clés du fournisseur IA de la saisie express.
-    public const string AiProviderKey = "ai.provider";   // "" | "openai" | "azure" | "anthropic"
-    public const string AiApiKeyKey   = "ai.apikey";
-    public const string AiModelKey    = "ai.model";      // modèle ou nom de déploiement Azure
-    public const string AiEndpointKey = "ai.endpoint";   // ressource Azure uniquement
-
     static readonly ConcurrentDictionary<string, string> cache = new();
     static volatile bool loaded;
 
@@ -43,7 +37,4 @@ public class SettingsService(IDbContextFactory<NutriPlanContext> factory)
         cache[key] = value;
     }
 
-    public async Task<(string Provider, string ApiKey, string Model, string Endpoint)> GetAiConfigAsync() =>
-        (await GetAsync(AiProviderKey), await GetAsync(AiApiKeyKey),
-         await GetAsync(AiModelKey), await GetAsync(AiEndpointKey));
 }

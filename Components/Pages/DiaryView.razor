@@ -470,27 +470,6 @@ else
                 </div>
             </div>
 
-            <!-- ── Saisie express : une phrase (dictée du clavier ou tapée) → aliments structurés ── -->
-            @if (showExpress)
-            {
-                <ExpressCapture Catalog="@catalog" FoodSuggestions="@foodSuggestions"
-                                InitialSlot="@MealPhraseParser.NearestSlot(Time.TimeNow)"
-                                OnCommit="CommitExpress" OnClose="() => showExpress = false" />
-            }
-            else
-            {
-                <button @onclick="() => showExpress = true"
-                        class="w-full flex items-center gap-2.5 bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.25)] px-4 py-3 text-left hover:shadow-[0_1px_0_rgba(20,26,31,.06),0_12px_20px_-12px_rgba(20,26,31,.4)] transition-shadow print:hidden">
-                    <span class="w-7 h-7 rounded-lg bg-carbon flex items-center justify-center flex-shrink-0">
-                        <Icon Name="zap" Class="w-3.5 h-3.5 text-volt" />
-                    </span>
-                    <span class="min-w-0">
-                        <span class="block text-[13px] font-bold text-carbon leading-tight">Saisie express</span>
-                        <span class="block text-[10.5px] text-gray-400 leading-tight mt-0.5 truncate">Décrivez votre repas en une phrase — l'agent remplit le carnet</span>
-                    </span>
-                </button>
-            }
-
             <!-- ── Déplacement d'une journée saisie sur la mauvaise date ──────── -->
             @if (showMoveDay)
             {
@@ -608,6 +587,29 @@ else
                         <span class="flex-1 h-1 rounded-sm @(seg < FilledMealsCount ? "bg-volt" : "bg-carbon-2")"></span>
                     }
                 </div>
+            </div>
+
+            <!-- ── Saisie express : une phrase (dictée du clavier ou tapée) → aliments structurés ── -->
+            <div class="mt-4 print:hidden">
+                @if (showExpress)
+                {
+                    <ExpressCapture Catalog="@catalog" FoodSuggestions="@foodSuggestions"
+                                    InitialSlot="@MealPhraseParser.NearestSlot(Time.TimeNow)"
+                                    OnCommit="CommitExpress" OnClose="() => showExpress = false" />
+                }
+                else
+                {
+                    <button @onclick="() => showExpress = true"
+                            class="w-full flex items-center gap-2.5 bg-white rounded-xl shadow-[0_1px_0_rgba(20,26,31,.06),0_10px_18px_-12px_rgba(20,26,31,.25)] px-4 py-3 text-left hover:shadow-[0_1px_0_rgba(20,26,31,.06),0_12px_20px_-12px_rgba(20,26,31,.4)] transition-shadow">
+                        <span class="w-7 h-7 rounded-lg bg-carbon flex items-center justify-center flex-shrink-0">
+                            <Icon Name="zap" Class="w-3.5 h-3.5 text-volt" />
+                        </span>
+                        <span class="min-w-0">
+                            <span class="block text-[13px] font-bold text-carbon leading-tight">Saisie express</span>
+                            <span class="block text-[10.5px] text-gray-400 leading-tight mt-0.5 truncate">Décrivez votre repas en une phrase — l'agent remplit le carnet</span>
+                        </span>
+                    </button>
+                }
             </div>
 
             @* ── Messages du nutritionniste sur cette journée ─────────────────── *@
