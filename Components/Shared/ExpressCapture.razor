@@ -33,18 +33,23 @@
     else
     {
         <div class="p-4 pt-3 space-y-3">
-            @* Créneau de destination — pré-choisi d'après la phrase ou l'heure *@
-            <div class="flex flex-wrap gap-1.5">
-                @for (int i = 0; i < DiaryService.MealSlots.Length; i++)
-                {
-                    var idx = i;
-                    var s = DiaryService.MealSlots[i];
-                    <button @onclick="() => slotIndex = idx"
-                            class="h-7 px-2.5 rounded-full text-[10px] font-bold transition-colors
-                                   @(slotIndex == idx ? "bg-carbon text-volt" : "bg-white border border-[#dfe5ea] text-gray-500 hover:border-gray-300 shadow-[0_1px_2px_rgba(20,26,31,.05)]")">
-                        @s.Icon @s.Label
-                    </button>
-                }
+            @* Créneau de destination — pré-choisi d'après la phrase ou l'heure,
+               modifiable d'un tap avant l'ajout *@
+            <div>
+                <p class="text-[9px] font-extrabold uppercase tracking-[.14em] text-gray-400 mb-1.5">Ajouter au repas :</p>
+                <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Créneau de destination">
+                    @for (int i = 0; i < DiaryService.MealSlots.Length; i++)
+                    {
+                        var idx = i;
+                        var s = DiaryService.MealSlots[i];
+                        <button type="button" role="radio" aria-checked="@(slotIndex == idx ? "true" : "false")"
+                                @onclick="() => SelectSlot(idx)"
+                                class="h-7 px-2.5 rounded-full text-[10px] font-bold transition-colors
+                                       @(slotIndex == idx ? "bg-carbon text-volt" : "bg-white border border-[#dfe5ea] text-gray-500 hover:border-gray-300 shadow-[0_1px_2px_rgba(20,26,31,.05)]")">
+                            @s.Icon @s.Label
+                        </button>
+                    }
+                </div>
             </div>
 
             @if (rows.Count == 0)
@@ -128,9 +133,9 @@
                     {
                         <span class="text-xs font-bold text-gray-500 tabular-nums">≈ @($"{total:0}") kcal</span>
                     }
-                    <button @onclick="Commit" disabled="@(!HasCommittable)"
+                    <button @onclick="Commit" disabled="@(!HasCommittable || committing)"
                             class="bg-volt hover:bg-volt-dark disabled:opacity-40 text-carbon px-4 py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[.08em] transition-colors">
-                        Tout ajouter
+                        @(committing ? "Ajout…" : "Tout ajouter")
                     </button>
                 </div>
             </div>
@@ -171,9 +176,18 @@
     int slotIndex;
     TimeOnly? explicitTime;
     bool analyzing;
+    bool committing;
     string engineLabel = "";
 
     protected override void OnInitialized() => slotIndex = InitialSlot;
+
+    // Choix manuel du créneau : l'heure extraite de la phrase appartenait au
+    // créneau détecté — on ne la transpose pas sur un autre repas.
+    void SelectSlot(int idx)
+    {
+        if (idx != slotIndex) explicitTime = null;
+        slotIndex = idx;
+    }
 
     async Task Analyze()
     {
@@ -246,6 +260,14 @@
     bool HasCommittable => rows != null && rows.Any(r => r.Selected != null || !string.IsNullOrWhiteSpace(r.ManualName));
 
     async Task Commit()
+    {
+        if (rows == null || committing) return;
+        committing = true;
+        try { await DoCommitAsync(); }
+        finally { committing = false; }
+    }
+
+    async Task DoCommitAsync()
     {
         if (rows == null) return;
         var entries = new List<ExpressEntry>();

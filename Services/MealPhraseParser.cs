@@ -22,13 +22,15 @@ public static partial class MealPhraseParser
     // ── Créneaux : mots-clés pliés → index de DiaryService.MealSlots ────────
     static readonly (string Needle, int Slot)[] SlotKeywords =
     [
-        ("petit dejeuner", 0), ("petit dej", 0), ("au reveil", 0), ("au petit déj", 0),
-        ("collation du matin", 1), ("collation matin", 1), ("en cas du matin", 1), ("dans la matinee", 1),
+        ("petit dejeuner", 0), ("petit dej", 0), ("au reveil", 0), ("ce matin", 0), ("le matin", 0),
+        ("collation du matin", 1), ("collation matin", 1), ("en cas du matin", 1),
+        ("dans la matinee", 1), ("en matinee", 1),
         ("a midi", 2), ("ce midi", 2), ("au dejeuner", 2), ("dejeuner", 2),
         ("gouter", 3), ("quatre heures", 3), ("collation de l apres midi", 3),
-        ("collation apres midi", 3), ("dans l apres midi", 3),
-        ("au diner", 4), ("diner", 4), ("ce soir", 4), ("souper", 4),
-        ("collation du soir", 5), ("avant de dormir", 5), ("avant de me coucher", 5), ("en soiree", 5),
+        ("collation apres midi", 3), ("dans l apres midi", 3), ("cet apres midi", 3),
+        ("au diner", 4), ("diner", 4), ("ce soir", 4), ("le soir", 4), ("souper", 4),
+        ("collation du soir", 5), ("avant de dormir", 5), ("avant de me coucher", 5),
+        ("en soiree", 5), ("dans la soiree", 5),
     ];
 
     // Tournures d'introduction à retirer avant le découpage.
